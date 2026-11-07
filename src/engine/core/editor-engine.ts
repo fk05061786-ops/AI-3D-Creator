@@ -234,19 +234,6 @@ export class EditorEngine {
     });
   }
 
-  private saveState(action: string, data: any): void {
-    this._undoStack.push({ action, data });
-    this._redoStack = [];
-  }
-
-  /**
-   * Toggle between modeling and sculpting modes.
-   */
-  toggleSculpting(): boolean {
-    this._isSculpting = !this._isSculpting;
-    return this._isSculpting;
-  }
-
   /**
    * Public API to save a modeling operation state for undo/redo.
    */
