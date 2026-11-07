@@ -1,0 +1,153 @@
+# PHASE 3 IMPLEMENTATION PLAN
+
+## Overview
+This plan outlines the steps to resolve TypeScript errors and fix compatibility issues in the AI 3D Creator project.
+
+## Remaining TypeScript Errors
+
+### 1. Scene and SceneObject Type Issues
+
+#### File: `src/engine/core/editor-engine.ts`
+- **Root Cause:** Missing proper type definitions for `Scene` and `SceneObject`.
+- **Fix:**
+  - Create proper type definitions for `Scene` and `SceneObject`.
+  - Ensure all properties like `three` and `geometry` are correctly typed.
+- **Dependencies:**
+  - `src/engine/modeling/mesh-editor.ts`
+  - `src/engine/export/glb-importer.ts`
+
+#### File: `src/engine/modeling/mesh-editor.ts`
+- **Root Cause:** Type issues with `geometry` and `index` properties.
+- **Fix:**
+  - Ensure proper typing for `geometry` and `index` properties.
+  - Fix handling of `SceneObject`.
+- **Dependencies:**
+  - `src/engine/core/editor-engine.ts`
+
+#### File: `src/engine/export/glb-importer.ts`
+- **Root Cause:** SceneObject type mismatch.
+- **Fix:**
+  - Ensure proper typing for `SceneObject`.
+- **Dependencies:**
+  - `src/engine/core/editor-engine.ts`
+
+### 2. Three.js API Issues
+
+#### File: `src/engine/modeling/modeling-ops.ts`
+- **Root Cause:** `BevelBufferGeometry` and `SubdivisionModifier` are not available in newer Three.js versions.
+- **Fix:**
+  - Replace `BevelBufferGeometry` with manual bevel implementation.
+  - Replace `SubdivisionModifier` with manual subdivision implementation.
+- **Dependencies:**
+  - `src/engine/core/editor-engine.ts`
+
+### 3. UI Component Issues
+
+#### File: `src/ui/App.ts`
+- **Root Cause:** Actions type mismatch and private property access.
+- **Fix:**
+  - Correct type mismatches in UI components.
+  - Ensure proper typing for all UI elements and event handlers.
+  - Use public methods to access private properties.
+- **Dependencies:**
+  - `src/ui/Toolbar.ts`
+  - `src/ui/Hierarchy.ts`
+  - `src/ui/Inspector.ts`
+  - `src/ui/ProjectManager.ts`
+  - `src/ui/UILite.ts`
+  - `src/ui/modeling/EditModePanel.ts`
+
+#### File: `src/ui/Hierarchy.ts`
+- **Root Cause:** Type issues with UI elements.
+- **Fix:**
+  - Correct type mismatches in UI components.
+  - Ensure proper typing for all UI elements and event handlers.
+- **Dependencies:**
+  - `src/ui/UILite.ts`
+
+#### File: `src/ui/Inspector.ts`
+- **Root Cause:** Type issues with UI elements.
+- **Fix:**
+  - Correct type mismatches in UI components.
+  - Ensure proper typing for all UI elements and event handlers.
+- **Dependencies:**
+  - `src/ui/UILite.ts`
+
+#### File: `src/ui/ProjectManager.ts`
+- **Root Cause:** Type issues with UI elements and modal handling.
+- **Fix:**
+  - Correct type mismatches in UI components.
+  - Ensure proper typing for all UI elements and event handlers.
+- **Dependencies:**
+  - `src/ui/UILite.ts`
+
+#### File: `src/ui/Toolbar.ts`
+- **Root Cause:** Type issues with UI elements.
+- **Fix:**
+  - Correct type mismatches in UI components.
+  - Ensure proper typing for all UI elements and event handlers.
+- **Dependencies:**
+  - `src/ui/UILite.ts`
+
+#### File: `src/ui/UILite.ts`
+- **Root Cause:** Type issues with UI elements.
+- **Fix:**
+  - Correct type mismatches in UI components.
+  - Ensure proper typing for all UI elements and event handlers.
+- **Dependencies:**
+  - `src/ui/App.ts`
+  - `src/ui/Hierarchy.ts`
+  - `src/ui/Inspector.ts`
+  - `src/ui/ProjectManager.ts`
+  - `src/ui/Toolbar.ts`
+  - `src/ui/modeling/EditModePanel.ts`
+
+#### File: `src/ui/modeling/EditModePanel.ts`
+- **Root Cause:** Type issues with UI elements and private property access.
+- **Fix:**
+  - Correct type mismatches in UI components.
+  - Ensure proper typing for all UI elements and event handlers.
+  - Use public methods to access private properties.
+- **Dependencies:**
+  - `src/ui/UILite.ts`
+
+## Partially Modified or Broken Files
+
+### `src/engine/core/editor-engine.ts`
+- **Status:** Partially modified.
+- **Issues:**
+  - Needs proper imports for `Scene`, `SceneGraph`, and `OrbitControls`.
+  - Type issues with `Object3D` and `geometry` properties.
+
+### `src/engine/modeling/mesh-editor.ts`
+- **Status:** Partially modified.
+- **Issues:**
+  - Type issues with `geometry` and `index` properties.
+  - Missing proper handling of `SceneObject`.
+
+### `src/ui/App.ts`
+- **Status:** Partially modified.
+- **Issues:**
+  - Actions type mismatch.
+  - Private property access.
+
+## Implementation Steps
+
+1. **Create Type Definitions:**
+   - Create proper type definitions for `Scene`, `SceneObject`, and `Object3D`.
+
+2. **Fix Three.js API Usage:**
+   - Replace deprecated APIs with compatible alternatives.
+
+3. **Fix UI Components:**
+   - Correct type mismatches in UI components.
+   - Ensure proper typing for all UI elements and event handlers.
+
+4. **Verify TypeScript Errors:**
+   - Run TypeScript compiler to verify all errors are resolved.
+
+5. **Test Functionality:**
+   - Ensure all features work as expected after fixes.
+
+## Conclusion
+This plan provides a systematic approach to resolve TypeScript errors and fix compatibility issues in the AI 3D Creator project. The focus should be on creating proper type definitions, fixing Three.js API compatibility, correcting UI component types, and ensuring proper encapsulation.

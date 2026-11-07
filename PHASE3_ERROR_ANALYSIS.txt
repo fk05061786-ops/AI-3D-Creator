@@ -1,0 +1,111 @@
+---
+name: Phase3_Errors_Analysis
+description: Analysis of TypeScript errors across 13 files in the AI-3D-Creator project.
+metadata:
+  type: reference
+---
+
+## Summary
+
+**Total Errors:** 85 across 13 files.
+
+### Grouped by File
+
+1. **src/ui/App.ts** (5 errors):
+   - Missing required `onToggleEditMode` in `Actions` interface.
+   - Private property `_isSculpting` accessed outside `EditorEngine`.
+
+2. **src/engine/core/editor-engine.ts** (5 errors):
+   - Missing required `../core/types` module import.
+   - `geometry` property missing on `Object3D` type.
+   - Type mismatch for `SceneObject` in `GLBImporter`.
+
+3. **src/engine/modeling/mesh-editor.ts** (5 errors):
+   - Type mismatch for `null` vs. `number` in vertex selection logic.
+   - `geometry` property missing on `Object3D` type.
+
+4. **src/engine/modeling/modeling-ops.ts** (17 errors):
+   - Missing `Face` property in `THREE` type imports.
+   - Missing `BevelBufferGeometry`, `BevelMode`, `SubdivisionModifier` properties.
+   - Type mismatch for `string` vs. `number` in face/edge indexing.
+   - `userData` property missing on `ObjectMeta`.
+   - `abIndex` not defined.
+
+5. **src/engine/modifiers/modifier-system.ts** (2 errors):
+   - `geometry` property missing on `Object3D` type.
+
+6. **src/ui/Toolbar.ts** (1 error):
+   - Missing `onToggleEditMode` in `Actions` interface.
+
+7. **src/ui/Hierarchy.ts, Inspector.ts, ProjectManager.ts, Toolbar.ts, UILite.ts** (20 errors):
+   - Type mismatch for `click` event handlers (e.g., `{ click: () => void }` vs. `string`).
+   - Missing `text` import for `text` function.
+   - `nodeType` and `disabled` properties missing on `string`/`HTMLElement`.
+   - `modal` and `content` variables used before declaration.
+
+8. **src/ui/modeling/EditModePanel.ts** (10 errors):
+   - Missing required edit mode buttons in `EditModePanel` interface.
+   - Private `saveState` property accessed outside `EditorEngine`.
+   - `geometry` and `extrude`/`subdivide` properties missing on `EditorEngine`.
+   - Type mismatch for `click` event handlers.
+
+---
+
+## Root Causes
+
+### 1. TypeScript Inconsistencies
+   - **Missing Imports:** `../core/types` and `SceneObject` properties like `applyMaterial`, `clone` are not imported or defined.
+   - **Three.js API Mismatch:** Missing or incorrect type definitions for `Face`, `BevelBufferGeometry`, `SubdivisionModifier`, etc.
+   - **Inconsistent Types:** `Object3D` lacks `geometry` property in some contexts.
+
+### 2. UI/UX Event Handling
+   - **Click Event Mismatch:** UI components expect `click` handlers to return `void` or `SceneObject`, but the codebase uses `string` types.
+   - **Modal/Variable Issues:** Variables like `modal` and `content` are used before declaration.
+
+### 3. Shared Type Definitions
+   - **Missing `SceneObject` Properties:** `applyMaterial`, `clone`, and `userData` are referenced but not defined in `SceneObject`.
+   - **EditorEngine Access:** Private properties like `_isSculpting` and `saveState` are accessed outside their class.
+
+### 4. Three.js API Misuse
+   - **Incorrect Usage of `THREE` Types:** Errors like `Property 'Face' does not exist` indicate incorrect or missing type definitions for Three.js classes.
+
+---
+
+## Dependency Order for Fixes
+
+1. **Core Types:** Fix `SceneObject` and `Object3D` type definitions to include all required properties.
+2. **Three.js API:** Update `@types/three` to include missing properties like `Face`, `BevelBufferGeometry`, `SubdivisionModifier`.
+3. **UI Event Handling:** Update `UILite` and related UI components to handle click events correctly.
+4. **EditorEngine Access:** Ensure private properties are accessed only within `EditorEngine`.
+5. **Shared Type Definitions:** Update `SceneObject` to include all required properties.
+
+---
+
+## Prioritization Notes
+
+- **Critical:** Fix `SceneObject` and `Object3D` type mismatches to prevent runtime errors.
+- **High:** Update Three.js API usage to match the latest `@types/three` definitions.
+- **Medium:** Fix UI event handler inconsistencies.
+- **Low:** Address private property access issues within `EditorEngine`.
+
+---
+
+## Files Affected
+
+1. `src/ui/App.ts`
+2. `src/engine/core/editor-engine.ts`
+3. `src/engine/modeling/mesh-editor.ts`
+4. `src/engine/modeling/modeling-ops.ts`
+5. `src/engine/modifiers/modifier-system.ts`
+6. `src/ui/Toolbar.ts`
+7. `src/ui/Hierarchy.ts`
+8. `src/ui/Inspector.ts`
+9. `src/ui/ProjectManager.ts`
+10. `src/ui/UILite.ts`
+11. `src/ui/modeling/EditModePanel.ts`
+12. `src/engine/export/glb-importer.ts`
+13. `src/engine/core/types.ts` (hypothetical, inferred from errors)
+
+---
+
+**Analysis complete.**

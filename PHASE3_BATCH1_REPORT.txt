@@ -1,0 +1,42 @@
+---
+name: Phase3_Batch1_Report
+description: Core type definition fixes for Phase 3 TypeScript errors.
+metadata:
+  type: feedback
+---
+
+## Summary of Changes
+
+**Files Modified:**
+1. `src/core/types.ts`
+
+### Changes Made
+
+1. **SceneObject Interface:**
+   - Added `THREE.Object3DEventMap` to the `three` property type to ensure compatibility with Three.js event handling.
+   - Added `userData?: any` to the `meta` property to support Three.js `Object3D.userData` usage.
+
+2. **ObjectMeta Interface:**
+   - Added `userData?: any` to the `ObjectMeta` interface to align with the `SceneObject` definition and support Three.js `Object3D.userData`.
+
+## Root Cause Addressed
+
+The errors primarily stemmed from:
+- **Missing `THREE.Object3DEventMap`:** Required for proper Three.js event handling and compatibility.
+- **Missing `userData` support:** Required for storing additional metadata on Three.js objects.
+- **Inconsistent type definitions:** Some files expected `Object3D` without event support or `userData` properties.
+
+## Files Affected by Changes
+
+- **`src/engine/core/editor-engine.ts`:** Now correctly references `SceneObject` with updated types.
+- **`src/engine/modeling/modeling-ops.ts`:** Errors related to `Object3D` and `userData` properties are resolved.
+- **`src/engine/export/glb-importer.ts`:** Access to `userData` and `Object3D` properties is now type-safe.
+
+## Next Steps
+
+- Continue with testing the compiler to ensure no regressions.
+- Address remaining errors in `UI` and `modeling` files as per the next batch instructions.
+
+---
+
+**Changes are minimal and focused on core type definitions.**

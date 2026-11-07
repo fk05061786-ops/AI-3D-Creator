@@ -1,0 +1,26 @@
+{
+  "name": "ai-3d-creator",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build"
+  },
+  "keywords": [],
+  "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/cli": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
+    "@types/three": "^0.187.0",
+    "three": "^0.187.0",
+    "vite": "^8.3.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

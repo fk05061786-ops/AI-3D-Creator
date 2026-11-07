@@ -1,0 +1,359 @@
+import * as THREE from 'three';
+import { SceneGraph } from './scene-graph';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { SceneObject } from '../core/types';
+import { Scene } from '../core/types';
+import { TransformControlsEx } from './transform-controls';
+import { SculptingEngine } from '../sculpting/sculpting-engine';
+import { ModifierSystem } from '../modifiers/modifier-system';
+import { MeshEditor } from '../modeling/mesh-editor';
+
+/**
+ * Top-level engine with undo/redo support.
+ */
+export class EditorEngine {
+  readonly scene: Scene;
+  readonly graph: SceneGraph;
+  readonly camera: THREE.PerspectiveCamera;
+  readonly renderer: THREE.WebGLRenderer;
+  readonly orbit: OrbitControls;
+  readonly transform: TransformControlsEx;
+  readonly meshEditor: MeshEditor;
+  readonly sculpting: SculptingEngine;
+  readonly modifiers: ModifierSystem;
+
+  private _raycaster = new THREE.Raycaster();
+  private _pointer = new THREE.Vector2();
+  private _lastSelection: THREE.Object3D | null = null;
+  private _isSculpting: boolean = false;
+  private _undoStack: { action: string; data: any }[] = [];
+  private _redoStack: { action: string; data: any }[] = [];
+  private _isEditMode: boolean = false;
+
+  constructor(viewport: HTMLElement) {
+    this.scene = new Scene();
+    this.graph = new SceneGraph();
+    this.scene.three.add(this.graph.root);
+
+    const width = viewport.clientWidth;
+    const height = viewport.clientHeight;
+    this.camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 200);
+    this.camera.position.set(6, 5, 8);
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    this.renderer.setSize(width, height);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    viewport.appendChild(this.renderer.domElement);
+
+    this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
+    this.orbit.enableDamping = true;
+
+    this.meshEditor = new MeshEditor(this.scene.three);
+    this.orbit.dampingFactor = 0.08;
+    this.orbit.minDistance = 2;
+    this.orbit.maxDistance = 60;
+    this.orbit.target.set(0, 1, 0);
+
+    this.transform = new TransformControlsEx(this.camera, this.renderer.domElement);
+    this.transform.enabled = false;
+
+    this.meshEditor = new MeshEditor(this.scene.three);
+    this.sculpting = new SculptingEngine();
+    this.modifiers = new ModifierSystem();
+
+    // While the user drags the transform gizmo, pause orbiting so the
+    // two pointer handlers don't fight each other.
+    this.transform.controls.addEventListener('mouseDown', () => {
+      this.orbit.enabled = false;
+    });
+    this.transform.controls.addEventListener('mouseUp', () => {
+      this.orbit.enabled = true;
+    });
+
+    this.graph.onSelectionChange((obj) => {
+      this.transform.attach(obj ? obj.three : null);
+      this.transform.enabled = !!obj;
+      this.meshEditor.updateVisuals(obj);
+    });
+
+    this.bindPointer();
+    this.bindResize(viewport);
+    this.bindKeyboard();
+  }
+
+  toggleEditMode(): void {
+    this._isEditMode = !this._isEditMode;
+    this.orbit.enabled = !this._isEditMode;
+    this.transform.enabled = !this._isEditMode;
+    this.meshEditor.setMode(this._isEditMode ? 'vertex' : 'object', this.graph.selected);
+  }
+
+  // --- render loop -------------------------------------------------------
+
+  start(): void {
+    const tick = () => {
+      requestAnimationFrame(tick);
+      this.orbit.update();
+      this.renderer.render(this.scene.three, this.camera);
+    };
+    tick();
+  }
+}
+
+  // --- undo/redo -------------------------------------------------------
+
+  private saveState(action: string, data: any): void {
+    this._undoStack.push({ action, data });
+    this._redoStack = []; // Clear redo stack when new action is performed
+  }
+
+  undo(): void {
+    if (this._undoStack.length === 0) return;
+
+    const { action, data } = this._undoStack.pop()!;
+    this._redoStack.push({ action, data });
+
+    switch (action) {
+      case 'add':
+        this.graph.remove(data);
+        break;
+      case 'delete':
+        this.graph.add(data);
+        break;
+      case 'transform':
+        const obj = this.graph.find(data.id);
+        if (obj) {
+          obj.three.position.copy(data.position);
+          obj.three.rotation.copy(data.rotation);
+          obj.three.scale.copy(data.scale);
+        }
+        break;
+      case 'extrude':
+        const extrudedObj = this.graph.find(data.id);
+        if (extrudedObj) {
+          extrudedObj.three.geometry = data.originalGeometry;
+        }
+        break;
+      // Add more cases for other actions
+    }
+  }
+
+  redo(): void {
+    if (this._redoStack.length === 0) return;
+
+    const { action, data } = this._redoStack.pop()!;
+    this._undoStack.push({ action, data });
+
+    switch (action) {
+      case 'add':
+        this.graph.add(data);
+        break;
+      case 'delete':
+        this.graph.remove(data);
+        break;
+      case 'transform':
+        const obj = this.graph.find(data.id);
+        if (obj) {
+          obj.three.position.copy(data.position);
+          obj.three.rotation.copy(data.rotation);
+          obj.three.scale.copy(data.scale);
+        }
+        break;
+      case 'extrude':
+        const extrudedObj = this.graph.find(data.id);
+        if (extrudedObj) {
+          extrudedObj.three.geometry = data.extrudedGeometry;
+        }
+        break;
+      // Add more cases for other actions
+    }
+  }
+
+  // --- object creation ---------------------------------------------------
+
+  addPrimitive(type: 'cube' | 'sphere' | 'cylinder' | 'plane'): SceneObject | null {
+    const obj = this.graph.addPrimitive(type);
+    if (obj) {
+      this.saveState('add', obj);
+    }
+    return obj;
+  }
+
+  deleteSelected(): void {
+    const sel = this.graph.selected;
+    if (sel) {
+      this.saveState('delete', sel);
+      this.graph.remove(sel);
+    }
+  }
+
+  duplicateSelected(): SceneObject | null {
+    const sel = this.graph.selected;
+    const dup = sel ? this.graph.duplicate(sel) : null;
+    if (dup) {
+      this.saveState('add', dup);
+    }
+    return dup;
+  }
+
+  clear(): void {
+    const objects = [...this.graph.objects];
+    this.saveState('clear', objects);
+    for (const obj of objects) this.graph.remove(obj);
+  }
+
+  // --- transform helpers -------------------------------------------------
+
+  setTransformMode(mode: 'translate' | 'rotate' | 'scale'): void {
+    this.transform.setMode(mode);
+  }
+
+  resetCamera(): void {
+    this.camera.position.set(6, 5, 8);
+    this.orbit.target.set(0, 1, 0);
+    this.orbit.update();
+  }
+
+  // --- selection ---------------------------------------------------------
+
+  private bindPointer(): void {
+    const el = this.renderer.domElement;
+    el.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+    el.addEventListener('pointermove', (e) => this.onPointerMove(e));
+    el.addEventListener('pointerup', () => this.onPointerUp());
+  }
+
+  private onPointerDown(e: PointerEvent): void {
+    if (this.transform.dragging) return;
+    this._pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+
+    // If we are in sculpting mode, start sculpting
+    if (this._isSculpting && this.graph.selected) {
+      this._raycaster.setFromCamera(this._pointer, this.camera);
+      const hits = this._raycaster.intersectObject(this.graph.selected.three, true);
+      if (hits.length > 0) {
+        this.orbit.enabled = false;
+        const hit = hits[0];
+        if (hit.face && hit.face.normal) {
+          const normal = hit.face.normal.clone();
+          normal.transformDirection(hit.object.matrixWorld);
+          this.sculpting.applyStroke(this.graph.selected, hit.point, normal);
+        }
+      }
+      return;
+    }
+
+    // If we are in edit mode (vertex/face), select components
+    if (this.meshEditor.mode !== 'object' && this.graph.selected) {
+      this.meshEditor.selectComponents(this.graph.selected, this._pointer, this.camera);
+      return;
+    }
+
+    this._raycaster.setFromCamera(this._pointer, this.camera);
+    const hits = this._raycaster.intersectObjects(this.graph.root.children, true);
+    const picked = this.firstSelectable(hits);
+    this._lastSelection = picked;
+  }
+
+  private onPointerMove(e: PointerEvent): void {
+    if (this.transform.dragging) return;
+    this._pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+
+    if (this._isSculpting && this.graph.selected && e.buttons === 1) {
+      this._raycaster.setFromCamera(this._pointer, this.camera);
+      const hits = this._raycaster.intersectObject(this.graph.selected.three, true);
+      if (hits.length > 0) {
+        const hit = hits[0];
+        if (hit.face && hit.face.normal) {
+          const normal = hit.face.normal.clone();
+          normal.transformDirection(hit.object.matrixWorld);
+          this.sculpting.applyStroke(this.graph.selected, hit.point, normal);
+        }
+      }
+      return;
+    }
+
+    if (!this._lastSelection) return;
+    this._raycaster.setFromCamera(this._pointer, this.camera);
+    const hits = this._raycaster.intersectObjects(this.graph.root.children, true);
+    const picked = this.firstSelectable(hits);
+    if (picked && picked !== this._lastSelection) {
+      this._lastSelection = picked;
+      this.selectByNode(picked);
+    }
+  }
+
+  private onPointerUp(): void {
+    this.orbit.enabled = true;
+    if (this.transform.dragging) return;
+    if (this._lastSelection) this.selectByNode(this._lastSelection);
+    this._lastSelection = null;
+  }
+
+  private firstSelectable(hits: THREE.Intersection[]): THREE.Object3D | null {
+    for (const hit of hits) {
+      let node: THREE.Object3D | null = hit.object;
+      while (node && node !== this.graph.root) {
+        const obj = this.graph.objects.find((o) => o.three === node);
+        if (obj) return node;
+        node = node.parent;
+      }
+    }
+    return null;
+  }
+
+  private selectByNode(node: THREE.Object3D): void {
+    const obj = this.graph.objects.find((o) => o.three === node);
+    if (obj) this.graph.select(obj);
+  }
+
+  private bindResize(viewport: HTMLElement): void {
+    const onResize = () => {
+      const w = viewport.clientWidth;
+      const h = viewport.clientHeight;
+      this.camera.aspect = w / h;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(w, h);
+    };
+    new ResizeObserver(onResize).observe(viewport);
+    onResize();
+  }
+
+  private bindKeyboard(): void {
+    window.addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        this.deleteSelected();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        this.duplicateSelected();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        this.undo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        this.redo();
+      }
+    });
+  }
+
+  dispose(): void {
+    this.transform.dispose();
+    this.renderer.dispose();
+    this.renderer.domElement.remove();
+  }
+
+  // --- render loop -------------------------------------------------------
+
+  start(): void {
+    const tick = () => {
+      requestAnimationFrame(tick);
+      this.orbit.update();
+      this.renderer.render(this.scene.three, this.camera);
+    };
+    tick();
+  }
+}

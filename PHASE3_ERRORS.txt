@@ -1,0 +1,91 @@
+npm notice run ai-3d-creator@1.0.0 npx
+npm notice run 'tsc' --noEmit
+src/App.ts(22,32): error TS2345: Argument of type '{ engine: EditorEngine; onExport: () => Promise<void>; onClear: () => void; onImport: () => Promise<void>; }' is not assignable to parameter of type 'Actions'.
+  Property 'onToggleEditMode' is missing in type '{ engine: EditorEngine; onExport: () => Promise<void>; onClear: () => void; onImport: () => Promise<void>; }' but required in type 'Actions'.
+src/engine/core/editor-engine.ts(5,23): error TS2307: Cannot find module '../core/types' or its corresponding type declarations.
+src/engine/core/editor-engine.ts(114,29): error TS2339: Property 'geometry' does not exist on type 'Object3D<Object3DEventMap>'.
+src/engine/core/editor-engine.ts(145,29): error TS2339: Property 'geometry' does not exist on type 'Object3D<Object3DEventMap>'.
+src/engine/export/glb-importer.ts(75,28): error TS2345: Argument of type '{ three: THREE.Object3D<THREE.Object3DEventMap>; meta: { id: `${string}-${string}-${string}-${string}-${string}`; name: string; primitive: undefined; color: string; roughness: number; metalness: number; visible: boolean; locked: boolean; parentId: null; }; }' is not assignable to parameter of type 'SceneObject'.
+  Type '{ three: Object3D<Object3DEventMap>; meta: { id: `${string}-${string}-${string}-${string}-${string}`; name: string; primitive: undefined; color: string; roughness: number; metalness: number; visible: boolean; locked: boolean; parentId: null; }; }' is missing the following properties from type 'SceneObject': applyMaterial, clone
+src/engine/modeling/mesh-editor.ts(178,34): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number'.
+  Type 'null' is not assignable to type 'number'.
+src/engine/modeling/mesh-editor.ts(185,36): error TS2339: Property 'geometry' does not exist on type 'Object3D<Object3DEventMap>'.
+src/engine/modeling/mesh-editor.ts(205,36): error TS2339: Property 'geometry' does not exist on type 'Object3D<Object3DEventMap>'.
+src/engine/modeling/mesh-editor.ts(223,35): error TS2339: Property 'geometry' does not exist on type 'Object3D<Object3DEventMap>'.
+src/engine/modeling/modeling-ops.ts(45,30): error TS2339: Property 'Face' does not exist on type 'typeof import("/data/data/com.termux/files/home/AI-3D-Creator/node_modules/@types/three/build/three.module")'.
+src/engine/modeling/modeling-ops.ts(53,30): error TS2339: Property 'Face' does not exist on type 'typeof import("/data/data/com.termux/files/home/AI-3D-Creator/node_modules/@types/three/build/three.module")'.
+src/engine/modeling/modeling-ops.ts(152,30): error TS2339: Property 'Face' does not exist on type 'typeof import("/data/data/com.termux/files/home/AI-3D-Creator/node_modules/@types/three/build/three.module")'.
+src/engine/modeling/modeling-ops.ts(159,30): error TS2339: Property 'Face' does not exist on type 'typeof import("/data/data/com.termux/files/home/AI-3D-Creator/node_modules/@types/three/build/three.module")'.
+src/engine/modeling/modeling-ops.ts(192,28): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/engine/modeling/modeling-ops.ts(195,25): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/engine/modeling/modeling-ops.ts(198,30): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/engine/modeling/modeling-ops.ts(204,28): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/engine/modeling/modeling-ops.ts(207,25): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/engine/modeling/modeling-ops.ts(210,30): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/engine/modeling/modeling-ops.ts(257,34): error TS2551: Property 'BevelBufferGeometry' does not exist on type 'typeof import("/data/data/com.termux/files/home/AI-3D-Creator/node_modules/@types/three/build/three.module")'. Did you mean 'BufferGeometry'?
+src/engine/modeling/modeling-ops.ts(261,21): error TS2339: Property 'BevelMode' does not exist on type 'typeof import("/data/data/com.termux/files/home/AI-3D-Creator/node_modules/@types/three/build/three.module")'.
+src/engine/modeling/modeling-ops.ts(269,59): error TS18046: 'e' is of type 'unknown'.
+src/engine/modeling/modeling-ops.ts(294,36): error TS2339: Property 'SubdivisionModifier' does not exist on type 'typeof import("/data/data/com.termux/files/home/AI-3D-Creator/node_modules/@types/three/build/three.module")'.
+src/engine/modeling/modeling-ops.ts(305,21): error TS2339: Property 'userData' does not exist on type 'ObjectMeta'.
+src/engine/modeling/modeling-ops.ts(305,43): error TS2339: Property 'userData' does not exist on type 'ObjectMeta'.
+src/engine/modeling/modeling-ops.ts(313,21): error TS2339: Property 'userData' does not exist on type 'ObjectMeta'.
+src/engine/modeling/modeling-ops.ts(313,62): error TS2339: Property 'userData' does not exist on type 'ObjectMeta'.
+src/engine/modeling/modeling-ops.ts(318,19): error TS2339: Property 'userData' does not exist on type 'ObjectMeta'.
+src/engine/modeling/modeling-ops.ts(373,37): error TS2304: Cannot find name 'abIndex'.
+src/engine/modifiers/modifier-system.ts(63,20): error TS2339: Property 'geometry' does not exist on type 'Object3D<Object3DEventMap>'.
+src/engine/modifiers/modifier-system.ts(128,20): error TS2339: Property 'geometry' does not exist on type 'Object3D<Object3DEventMap>'.
+src/ui/App.ts(45,38): error TS2341: Property '_isSculpting' is private and only accessible within class 'EditorEngine'.
+src/ui/App.ts(45,61): error TS2341: Property '_isSculpting' is private and only accessible within class 'EditorEngine'.
+src/ui/App.ts(45,119): error TS2341: Property '_isSculpting' is private and only accessible within class 'EditorEngine'.
+src/ui/App.ts(104,12): error TS2341: Property '_isSculpting' is private and only accessible within class 'EditorEngine'.
+src/ui/App.ts(104,35): error TS2341: Property '_isSculpting' is private and only accessible within class 'EditorEngine'.
+src/ui/App.ts(106,37): error TS2341: Property '_isSculpting' is private and only accessible within class 'EditorEngine'.
+src/ui/Hierarchy.ts(42,11): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/Inspector.ts(33,22): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/Inspector.ts(176,24): error TS2322: Type '{ click: () => SceneObject | null; }' is not assignable to type 'string'.
+src/ui/Inspector.ts(177,45): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/ProjectManager.ts(14,20): error TS2564: Property 'pm' has no initializer and is not definitely assigned in the constructor.
+src/ui/ProjectManager.ts(39,59): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/ProjectManager.ts(40,59): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/ProjectManager.ts(69,62): error TS2322: Type '{ click: () => Promise<void>; }' is not assignable to type 'string'.
+src/ui/ProjectManager.ts(74,39): error TS2322: Type '{ click: () => Promise<void>; }' is not assignable to type 'string'.
+src/ui/ProjectManager.ts(78,13): error TS2322: Type '{ click: () => Promise<void>; }' is not assignable to type 'string'.
+src/ui/ProjectManager.ts(83,36): error TS2339: Property 'length' does not exist on type 'HTMLUListElement'.
+src/ui/ProjectManager.ts(88,11): error TS7022: 'modal' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.
+src/ui/ProjectManager.ts(88,19): error TS2448: Block-scoped variable 'modal' used before its declaration.
+src/ui/ProjectManager.ts(88,90): error TS2454: Variable 'content' is used before being assigned.
+src/ui/ProjectManager.ts(130,5): error TS2552: Cannot find name 'text'. Did you mean 'Text'?
+src/ui/Toolbar.ts(18,20): error TS2322: Type '{ click: () => SceneObject | null; }' is not assignable to type 'string'.
+src/ui/Toolbar.ts(27,20): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/Toolbar.ts(28,47): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/Toolbar.ts(29,20): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/Toolbar.ts(30,20): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/Toolbar.ts(31,41): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/UILite.ts(23,23): error TS2339: Property 'nodeType' does not exist on type 'string | Node'.
+  Property 'nodeType' does not exist on type 'string'.
+src/ui/UILite.ts(37,6): error TS2339: Property 'disabled' does not exist on type 'HTMLElement'.
+src/ui/UILite.ts(41,36): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/UILite.ts(77,61): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/UILite.ts(78,48): error TS2322: Type '{ click: (e: Event) => void; }' is not assignable to type 'string'.
+src/ui/modeling/EditModePanel.ts(10,20): error TS2739: Type '{}' is missing the following properties from type 'Record<EditMode, HTMLButtonElement>': object, vertex, edge, face
+src/ui/modeling/EditModePanel.ts(25,9): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/modeling/EditModePanel.ts(38,9): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/modeling/EditModePanel.ts(50,7): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/modeling/EditModePanel.ts(54,7): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/modeling/EditModePanel.ts(58,7): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/modeling/EditModePanel.ts(62,7): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/modeling/EditModePanel.ts(79,7): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/modeling/EditModePanel.ts(83,7): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/modeling/EditModePanel.ts(87,7): error TS2322: Type '{ click: () => void; }' is not assignable to type 'string'.
+src/ui/modeling/EditModePanel.ts(116,23): error TS2341: Property 'saveState' is private and only accessible within class 'EditorEngine'.
+src/ui/modeling/EditModePanel.ts(118,46): error TS2339: Property 'geometry' does not exist on type 'Object3D<Object3DEventMap>'.
+src/ui/modeling/EditModePanel.ts(120,23): error TS2339: Property 'extrude' does not exist on type 'EditorEngine'.
+src/ui/modeling/EditModePanel.ts(123,23): error TS2341: Property 'saveState' is private and only accessible within class 'EditorEngine'.
+src/ui/modeling/EditModePanel.ts(125,46): error TS2339: Property 'geometry' does not exist on type 'Object3D<Object3DEventMap>'.
+src/ui/modeling/EditModePanel.ts(131,23): error TS2341: Property 'saveState' is private and only accessible within class 'EditorEngine'.
+src/ui/modeling/EditModePanel.ts(133,46): error TS2339: Property 'geometry' does not exist on type 'Object3D<Object3DEventMap>'.
+src/ui/modeling/EditModePanel.ts(139,23): error TS2341: Property 'saveState' is private and only accessible within class 'EditorEngine'.
+src/ui/modeling/EditModePanel.ts(141,46): error TS2339: Property 'geometry' does not exist on type 'Object3D<Object3DEventMap>'.
+src/ui/modeling/EditModePanel.ts(143,23): error TS2339: Property 'subdivide' does not exist on type 'EditorEngine'.
+src/ui/modeling/EditModePanel.ts(148,45): error TS18046: 'err' is of type 'unknown'.
+src/ui/modeling/EditModePanel.ts(163,43): error TS18046: 'err' is of type 'unknown'.

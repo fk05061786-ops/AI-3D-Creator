@@ -1,0 +1,109 @@
+---
+name: Phase3_Recovery_Audit
+description: Recovery audit for Phase 3 TypeScript errors.
+metadata:
+  type: feedback
+---
+
+## Summary
+
+### Files Affected
+
+1. **`src/engine/core/editor-engine.ts`**
+   - **Syntax Errors:**
+     - Duplicate or malformed class/function declarations.
+     - Incorrectly placed `toggleEditMode` method within the class body.
+     - Syntax issues in `undo()` and `redo()` methods.
+   - **Changes Introduced:**
+     - Added `_isEditMode` property and `toggleEditMode()` method.
+     - Syntax errors likely introduced by incorrect method placement and formatting.
+
+2. **`src/engine/modeling/modeling-ops.ts`**
+   - **Syntax Errors:**
+     - Incorrect imports and type definitions.
+     - Malformed `Face` and `Face3` usage.
+     - Syntax errors in `bevel()` and `subdivide()` methods.
+   - **Changes Introduced:**
+     - Added incorrect imports (`FaceVertexInput`, `FaceVertexInput3`, `FaceVertexInput3D`).
+     - Attempted to use unsupported Three.js APIs.
+
+3. **`src/core/types.ts`**
+   - **Type Definition Issues:**
+     - Added `Mesh` import but not used correctly.
+     - `userData` property added but not consistently applied.
+   - **Changes Introduced:**
+     - Added `Mesh` import and `userData` property to `ObjectMeta`.
+
+4. **`src/ui/Toolbar.ts`**
+   - **No Syntax Errors:**
+     - Interface `Actions` correctly defined with `onToggleEditMode`.
+
+5. **`src/App.ts`**
+   - **No Syntax Errors:**
+     - `onToggleEditMode` callback correctly connected.
+
+### Confirmed Syntax Errors
+
+1. **`editor-engine.ts`:**
+   - Syntax errors in `undo()` and `redo()` methods due to incorrect method placement.
+   - Malformed `toggleEditMode()` method within the class body.
+   - Incorrect switch-case logic in `undo()` and `redo()` methods.
+
+2. **`modeling-ops.ts`:**
+   - Incorrect usage of `THREE.Face` and `THREE.Face3` types.
+   - Syntax errors in `bevel()` and `subdivide()` methods.
+   - Malformed imports and type definitions.
+
+### Current Three.js Version
+
+- **Installed Version:** `three@0.187.0`
+- **Available APIs:**
+  - `THREE.Object3D`, `THREE.Mesh`, `THREE.BufferGeometry`, `THREE.Scene`, `THREE.PerspectiveCamera`, `THREE.WebGLRenderer`, `THREE.Raycaster`, `THREE.Vector2`, `THREE.Vector3`, `THREE.MeshStandardMaterial`, `THREE.DirectionalLight`, `THREE.HemisphereLight`, `THREE.GridHelper`, `THREE.PCFSoftShadowMap`, `THREE.OrbitControls`.
+  - **Missing APIs:** `THREE.Face`, `THREE.BevelBufferGeometry`, `THREE.BevelMode`, `THREE.SubdivisionModifier` are not available in this version.
+
+### Changes Introduced by Previous Attempts
+
+1. **`editor-engine.ts`:**
+   - Added `_isEditMode` property and `toggleEditMode()` method.
+   - Incorrectly placed methods within the class body, causing syntax errors.
+
+2. **`modeling-ops.ts`:**
+   - Added incorrect imports and unsupported Three.js API usage.
+   - Attempted to use `THREE.Face`, `THREE.BevelBufferGeometry`, `THREE.BevelMode`, and `THREE.SubdivisionModifier`, which are not available.
+
+3. **`core/types.ts`:**
+   - Added `Mesh` import and `userData` property to `ObjectMeta`, but not consistently applied.
+
+### Git Recovery Options
+
+- **Not Applicable:** This project is not a Git repository, so no recovery options are available through Git.
+
+### Recommended Repair Order
+
+1. **Restore Valid Syntax:**
+   - Fix syntax errors in `editor-engine.ts` and `modeling-ops.ts`.
+   - Ensure all methods are correctly placed within class definitions.
+
+2. **Correct Shared Type Definitions:**
+   - Ensure consistent type definitions across `SceneObject` and `ObjectMeta`.
+   - Remove incorrect imports and type definitions.
+
+3. **Fix Object3D/Mesh Compatibility:**
+   - Use proper runtime checks for `Mesh` before accessing geometry.
+   - Implement compatible geometry operations using supported Three.js APIs.
+
+4. **Replace Unsupported Three.js APIs:**
+   - Replace unsupported APIs with compatible implementations using `BufferGeometry`.
+
+5. **Fix UI Type Mismatches:**
+   - Ensure UI components correctly handle click events.
+
+6. **Verify TypeScript Compilation:**
+   - Run `npx tsc --noEmit` to verify TypeScript compilation.
+
+7. **Test Existing Modeling Features:**
+   - Ensure existing modeling features work correctly.
+
+---
+
+**Audit complete.**
