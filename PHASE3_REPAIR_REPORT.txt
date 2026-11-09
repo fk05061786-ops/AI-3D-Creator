@@ -1,0 +1,43 @@
+# PHASE 3 REPAIR REPORT
+
+## Summary of Repairs
+Conducted on 2026-11-09. Fixed critical UI wiring bugs, missing UI CSS, and resolved the **Undo/Redo state management bypass for Inset and Bevel operations**.
+
+### 1. Inset & Bevel Undo/Redo State-Saving Refactor (CRITICAL ARCHITECTURAL FIX)
+- **Files Modified:** `src/engine/core/editor-engine.ts`, `src/ui/modeling/EditModePanel.ts`
+- **Issue:** `EditModePanel.ts` called `modelingOps.inset()` and `modelingOps.bevel()` directly, bypassing `EditorEngine` state tracking. Inset and Bevel operations could not be undone or redone.
+- **Fix:**
+  - Implemented `inset(object, amount)` and `bevel(object, width, segments)` methods on `EditorEngine`.
+  - Added state-saving (`this.saveState('inset', ...)` and `this.saveState('bevel', ...)`) prior to executing geometry mutation.
+  - Added `inset` and `bevel` cases to `EditorEngine.undo()` and `EditorEngine.redo()`.
+  - Refactored `EditModePanel.ts` to execute `this.engine.inset()` and `this.engine.bevel()`, delegating execution and state management directly to `EditorEngine`.
+- **Result:** Inset and Bevel now correctly save pre-operation geometry states, push to `_undoStack`, clear `_redoStack`, and support full multi-step Undo/Redo traversal.
+
+### 2. Split-Brain UI Wiring Fix
+- **File:** `src/ui/App.ts`
+- **Issue:** The "Edit Mode" button was calling `engine.toggleSculpting()` (brush mode) instead of `engine.toggleEditMode()` (mesh selection/modeling mode).
+- **Fix:** Wired `onToggleEditMode` to `engine.toggleEditMode()`.
+- **Result:** Clicking "Edit Mode" now correctly enables vertex/edge/face selection logic.
+
+### 3. Missing EditModePanel UI Styling
+- **File:** `style.css`
+- **Issue:** The CSS classes for `EditModePanel` components (`.mode-group`, `.brush-group`, etc.) were missing.
+- **Fix:** Added CSS styling for all panel groups and buttons, including active/hover states.
+- **Result:** Modeling controls (Extrude, Inset, Bevel, Subdivide, Mirror) are now properly styled in the sidebar.
+
+### 4. EditorEngine API Exposure
+- **File:** `src/engine/core/editor-engine.ts`
+- **Issue:** `isEditMode` was private, preventing the UI from correctly displaying the mode status.
+- **Fix:** Added public `isEditMode` getter.
+
+## Verification Results
+
+| Step | Result |
+|------|--------|
+| TypeScript | ✅ PASS (0 errors) |
+| Production Build | ✅ PASS (clean build) |
+| ESLint | ⚠️ REDUCED (Remaining: 15 warnings/minor errors) |
+| Logic Check | ✅ PASS (Inset & Bevel correctly wired to Undo/Redo stack) |
+
+---
+End of PHASE 3 REPAIR REPORT.

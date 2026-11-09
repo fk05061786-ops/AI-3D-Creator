@@ -1,33 +1,13 @@
 import { EditModePanel } from './modeling/EditModePanel';
-import { el } from './UILite';
 import { EditorEngine } from '../engine/core/editor-engine';
 import { GLBExporter } from '../engine/export/glb-exporter';
 import { GLBImporter } from '../engine/export/glb-importer';
 import { buildToolbar } from './Toolbar';
 import { Inspector } from './Inspector';
-import { EditModePanel } from './modeling/EditModePanel';
 import { Hierarchy } from './Hierarchy';
-import { EditModePanel } from './modeling/EditModePanel';
-import { SceneObject } from '../engine/core/object-model';
 
-interface Actions {
-  engine: EditorEngine;
-  onExport: () => Promise<void>;
-  onClear: () => void;
-  onImport: () => Promise<void>;
-  onToggleEditMode: () => void;
-}
 
-// --- Fix for missing onToggleEditMode in toolbar ---
 
-// Define Actions type for toolbar
-interface Actions {
-  engine: EditorEngine;
-  onExport: () => Promise<void>;
-  onClear: () => void;
-  onImport: () => Promise<void>;
-  onToggleEditMode: () => void;
-}
 
 /**
  * Root component with modeling UI integration.
@@ -44,7 +24,7 @@ export function App() {
     onExport: handleExport,
     onClear: handleClear,
     onImport: handleImport,
-    onToggleEditMode: () => { engine.toggleSculpting(); if (statusEl) statusEl.textContent = engine.isSculpting ? 'Sculpting Mode' : 'Modeling Mode'; }
+    onToggleEditMode: () => { engine.toggleEditMode(); if (statusEl) statusEl.textContent = engine.isEditMode ? 'Edit Mode' : 'Modeling Mode'; }
   });
   app.prepend(toolbar);
 
@@ -101,18 +81,19 @@ export function App() {
     }
   }
 
-  function handleToggleEditMode(): void {
-    // Toggle between modeling and sculpting modes
-    engine.toggleSculpting();
-    if (statusEl) {
-      statusEl.textContent = engine.isSculpting ? 'Sculpting Mode' : 'Modeling Mode';
-    }
-  }
 
   // Start the render loop (also starts the WebGL renderer).
   engine.start();
 
   // Expose for testing.
-  (window as any).ai3d = { engine, statusEl };
+  window.ai3d = { engine, statusEl };
   console.log('AI 3D Creator initialized. Open DevTools for engine access.');
+}
+declare global {
+  interface Window {
+    ai3d: {
+      engine: EditorEngine;
+      statusEl: HTMLElement;
+    };
+  }
 }

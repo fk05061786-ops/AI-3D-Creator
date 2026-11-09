@@ -27,6 +27,9 @@ export class EditorEngine {
   get isSculpting(): boolean {
     return this._isSculpting;
   }
+  get isEditMode(): boolean {
+    return this._isEditMode;
+  }
 
   setSculpting(value: boolean): void {
     this._isSculpting = value;
@@ -237,6 +240,24 @@ export class EditorEngine {
   /**
    * Public API to save a modeling operation state for undo/redo.
    */
+  inset(object: SceneObject, amount: number = 0.1): void {
+    if (!(object.three instanceof THREE.Mesh)) return;
+    this.saveState("inset", {
+      id: object.meta.id,
+      originalGeometry: object.three.geometry.clone()
+    });
+    this.modelingOps.inset(object, amount);
+  }
+
+  bevel(object: SceneObject, width: number = 0.05, segments: number = 1): void {
+    if (!(object.three instanceof THREE.Mesh)) return;
+    this.saveState("bevel", {
+      id: object.meta.id,
+      originalGeometry: object.three.geometry.clone()
+    });
+    this.modelingOps.bevel(object, width, segments);
+  }
+
   saveState(action: string, data: any): void {
     this._undoStack.push({ action, data });
     this._redoStack = [];
@@ -295,6 +316,22 @@ export class EditorEngine {
           subdividedObj.three.geometry.computeVertexNormals();
         }
         break;
+      case "inset": {
+        const obj = this.graph.find(data.id);
+        if (obj && obj.three instanceof THREE.Mesh) {
+          obj.three.geometry = data.originalGeometry;
+          obj.three.geometry.computeVertexNormals();
+        }
+        break;
+      }
+      case "bevel": {
+        const obj = this.graph.find(data.id);
+        if (obj && obj.three instanceof THREE.Mesh) {
+          obj.three.geometry = data.originalGeometry;
+          obj.three.geometry.computeVertexNormals();
+        }
+        break;
+      }
       // Add more cases for other actions
     }
   }
@@ -334,6 +371,22 @@ export class EditorEngine {
           subdividedObj.three.geometry.computeVertexNormals();
         }
         break;
+      case "inset": {
+        const obj = this.graph.find(data.id);
+        if (obj && obj.three instanceof THREE.Mesh) {
+          obj.three.geometry = data.originalGeometry;
+          obj.three.geometry.computeVertexNormals();
+        }
+        break;
+      }
+      case "bevel": {
+        const obj = this.graph.find(data.id);
+        if (obj && obj.three instanceof THREE.Mesh) {
+          obj.three.geometry = data.originalGeometry;
+          obj.three.geometry.computeVertexNormals();
+        }
+        break;
+      }
       // Add more cases for other actions
     }
   }

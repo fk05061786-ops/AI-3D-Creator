@@ -1,5 +1,6 @@
-import { el, text } from '../UILite';
+import { el } from '../UILite';
 import { EditorEngine } from '../../engine/core/editor-engine';
+import type { SculptBrushType } from '../../engine/sculpting/sculpting-engine';
 import { EditMode } from '../../engine/modeling/mesh-editor';
 import * as THREE from 'three';
 
@@ -93,15 +94,15 @@ export class EditModePanel {
   }
 
   private setEditMode(mode: EditMode): void {
-    for (const btn of Object.values(this.modeButtons)) btn.classList.remove('active');
-    this.modeButtons[mode].classList.add('active');
+    for (const btn of Object.values(this.modeButtons)) btn?.classList.remove('active');
+    this.modeButtons[mode]?.classList.add('active');
     this.engine.meshEditor.setMode(mode, this.engine.graph.selected);
   }
 
-  private setBrushType(type: string): void {
-    for (const btn of Object.values(this.brushTypeButtons)) btn.classList.remove('active');
-    this.brushTypeButtons[type].classList.add('active');
-    this.engine.sculpting.setBrushType(type as any);
+  private setBrushType(type: SculptBrushType): void {
+    for (const btn of Object.values(this.brushTypeButtons)) btn?.classList.remove('active');
+    this.brushTypeButtons[type]?.classList.add('active');
+    this.engine.sculpting.setBrushType(type);
   }
 
   private applyModelingOperation(operation: string, amount?: number): void {
@@ -119,34 +120,16 @@ export class EditModePanel {
     try {
       switch (operation) {
         case 'extrude':
-          this.engine.saveState('extrude', {
-            id: selected.meta.id,
-            originalGeometry: selected.three.geometry.clone()
-          });
-          this.engine.extrude(selected, amount || 0.5);
+this.engine.extrude(selected, amount || 0.5);
           break;
         case 'inset':
-          this.engine.saveState('inset', {
-            id: selected.meta.id,
-            originalGeometry: selected.three.geometry.clone()
-          });
-          // TODO: Implement actual inset
-          console.warn('Inset not implemented yet');
+          this.engine.inset(selected, amount || 0.1);
           break;
         case 'bevel':
-          this.engine.saveState('bevel', {
-            id: selected.meta.id,
-            originalGeometry: selected.three.geometry.clone()
-          });
-          // TODO: Implement actual bevel
-          console.warn('Bevel not implemented yet');
+          this.engine.bevel(selected, amount || 0.05, 1);
           break;
         case 'subdivide':
-          this.engine.saveState('subdivide', {
-            id: selected.meta.id,
-            originalGeometry: selected.three.geometry.clone()
-          });
-          this.engine.subdivide(selected);
+this.engine.subdivide(selected);
           break;
       }
     } catch (error: unknown) {

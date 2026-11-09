@@ -1,4 +1,4 @@
-import { el, modal } from './UILite';
+import { el, modal, text } from './UILite';
 import { ProjectManager } from '../engine/core/project-manager';
 import { EditorEngine } from '../engine/core/editor-engine';
 
@@ -11,7 +11,7 @@ type ProjectAction = 'save' | 'load' | 'import';
  */
 export class ProjectManagerUI {
   readonly element: HTMLElement;
-  private readonly pm: ProjectManager;
+  private readonly pm = new ProjectManager();
   private readonly nameInput: HTMLInputElement;
   private readonly statusEl: HTMLElement;
   private showState: Record<ProjectAction, boolean> = { save: false, load: false, import: false };
@@ -62,7 +62,7 @@ export class ProjectManagerUI {
     const modalEl = this.element.querySelector('#project-modal') as HTMLElement;
     if (!modalEl) return;
 
-    let content: Node;
+    let content: Node = el('p', { className: 'empty' }, 'No project action selected.');
     const projects = this.pm.listNames();
 
     if (this.currentAction === 'save') {
@@ -80,13 +80,13 @@ export class ProjectManagerUI {
         );
         list.appendChild(li);
       }
-      content = el('div', {}, list.length ? list : el('p', { className: 'empty' }, 'No saved projects.'), el('label', { className: 'import-btn' }, 'Import .json'));
+      content = el('div', {}, projects.length ? list : el('p', { className: 'empty' }, 'No saved projects.'), el('label', { className: 'import-btn' }, 'Import .json'));
     } else if (this.currentAction === 'import') {
       content = el('p', { className: 'empty' }, 'Select a file and click Import.');
     }
 
-    const modal = modal(this.currentAction === 'save' ? 'Save project' : 'Load project', content, () => this.hideModal());
-    modalEl.replaceChildren(modal);
+    const modalElement = modal(this.currentAction === 'save' ? 'Save project' : 'Load project', content, () => this.hideModal());
+    modalEl.replaceChildren(modalElement);
   }
 
   private hideModal(): void {

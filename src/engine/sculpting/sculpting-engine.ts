@@ -56,11 +56,12 @@ export class SculptingEngine {
             // Pull towards hit point
             vertex.lerp(localHit, factor);
             break;
-          case 'inflate':
+          case 'inflate': {
             // Push outwards from center
             const dir = vertex.clone().sub(localHit).normalize();
             vertex.addScaledVector(dir, factor * 0.5);
             break;
+          }
         }
 
         posAttr.setXYZ(i, vertex.x, vertex.y, vertex.z);

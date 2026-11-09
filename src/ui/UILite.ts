@@ -3,23 +3,32 @@
  * bundle stays small and there are no extra dependencies. Panels are
  * constructed with their host element and hold their own state.
  */
+type EventHandlers = Record<string, EventListener>;
+
+type ElAttrs = {
+  on?: EventHandlers;
+  [key: string]: string | EventHandlers | undefined;
+};
+
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K,
-  attrs: Record<string, string> = {},
+  attrs: ElAttrs = {},
   ...children: (Node | string)[]
 ): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {
-    if (key === 'className') node.className = value;
-    else if (key === 'html') (node as HTMLElement).innerHTML = value;
+    if (value == null) continue;
+    if (key === 'className' && typeof value === 'string') node.className = value;
+    else if (key === 'html' && typeof value === 'string') (node as HTMLElement).innerHTML = value;
     else if (key === 'on' && typeof value === 'object') {
       for (const [ev, fn] of Object.entries(value)) {
-        node.addEventListener(ev, fn as EventListener);
+        node.addEventListener(ev, fn);
       }
-    } else node.setAttribute(key, value);
+    } else if (typeof value === 'string') node.setAttribute(key, value);
   }
   for (const child of children) {
     if (child == null) continue;
-    node.append(child.nodeType ? child : document.createTextNode(String(child)));
+    if (typeof child === 'string') node.append(document.createTextNode(child));
+    else node.append(child);
   }
   return node;
 }
@@ -32,7 +41,7 @@ export function show(el: HTMLElement, value: boolean): void {
   el.style.display = value ? '' : 'none';
 }
 
-export function setDisabled(el: HTMLElement, value: boolean): void {
+export function setDisabled(el: HTMLButtonElement | HTMLInputElement, value: boolean): void {
   el.disabled = value;
 }
 
