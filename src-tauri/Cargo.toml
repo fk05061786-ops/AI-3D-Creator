@@ -1,0 +1,14 @@
+[package]
+name = "ai-3d-creator"
+version = "1.0.0"
+description = "AI 3D Creator Desktop App"
+authors = ["AI 3D Creator Team"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = [] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

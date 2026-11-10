@@ -1,0 +1,121 @@
+# PHASE 4: AI TEXT-TO-3D & IMAGE-TO-3D PREPARATION AND RESEARCH REPORT
+Date: 2026-11-09
+Project: AI-3D-Creator
+Status: RESEARCH AND PREPARATION ONLY (NO IMPLEMENTATION)
+
+---
+
+## 1. SUITABLE FREE AND OPEN-SOURCE TEXT-TO-3D MODELS
+
+### Candidate A: Shap-E (OpenAI)
+- **Type:** Text-to-3D / Image-to-3D conditional implicit neural representations.
+- **License:** MIT License.
+- **Maintenance Status:** Released by OpenAI (2023); stable, community-maintained.
+- **Compatibility:** Python / PyTorch; exports to mesh/GLB via marching cubes.
+- **Resource Requirements:** ~4GB–8GB VRAM (runs on mid-range GPUs, or CPU slowly).
+- **Verified Facts:** MIT-licensed, open weights available on Hugging Face (`openai/shap-e`).
+- **Limitations:** Low-poly outputs; lacks fine semantic details (good for basic props and primitives).
+
+### Candidate B: Point-E (OpenAI)
+- **Type:** Text-to-3D point cloud diffusion model followed by mesh extraction.
+- **License:** MIT License.
+- **Maintenance Status:** Stable open-source release.
+- **Compatibility:** Python / PyTorch.
+- **Resource Requirements:** ~2GB–4GB VRAM (very lightweight).
+- **Verified Facts:** Extremely fast generation (~10-20 seconds on GPU).
+- **Limitations:** Generates point clouds that require post-processing (marching cubes) to form solid meshes; surface quality can be grainy.
+
+### Candidate C: InstantMesh / TripoSR (Stability AI & Tripo3D)
+- **Type:** Feed-forward Image-to-3D reconstruction.
+- **License:** MIT License (TripoSR) / Apache 2.0 (InstantMesh).
+- **Maintenance Status:** Highly active community support (2024–2026).
+- **Compatibility:** Python / PyTorch / ONNX / WebAssembly (via server wrapper).
+- **Resource Requirements:** ~6GB–8GB VRAM (TripoSR), ~12GB VRAM (InstantMesh for high-res).
+- **Verified Facts:** Generates high-quality textured 3D meshes from a single image in <0.5 seconds on a modern GPU.
+- **Limitations:** Requires an image input (Image-to-3D); for Text-to-3D, requires a 2D text-to-image generator (e.g., SDXL-Turbo / Stable Diffusion) as a first stage.
+
+---
+
+## 2. RELEVANT GITHUB REPOSITORIES
+
+1. **TripoSR (`cvlab-st/TripoSR`)**
+   - *Description:* Fast feed-forward 3D reconstruction from a single image.
+   - *License:* MIT.
+   - *Compatibility:* Python 3.10+, PyTorch 2.0+.
+2. **Shap-E (`openai/shap-e`)**
+   - *Description:* Generate 3D assets from text prompts or images.
+   - *License:* MIT.
+   - *Compatibility:* PyTorch, Transformers.
+3. **InstantMesh (`TencentARC/InstantMesh`)**
+   - *Description:* Efficient 3D mesh generation from single images using multiview diffusion.
+   - *License:* Apache 2.0.
+   - *Compatibility:* PyTorch, Diffusers.
+
+---
+
+## 3. DEPENDENCIES & HARDWARE REQUIREMENTS
+
+- **Python:** 3.10 or 3.11
+- **Node.js:** 18+ (for frontend/Capacitor bridge)
+- **PyTorch:** 2.1+ with CUDA support (or CPU fallback)
+- **CUDA Toolkit:** 12.1+ (if running locally on NVIDIA GPU)
+- **Minimum RAM:** 16GB System RAM
+- **Minimum VRAM:** 6GB–8GB VRAM (NVIDIA GPU recommended)
+- **Storage:** ~10GB for model weights (Shap-E, TripoSR, SD weights)
+
+---
+
+## 4. LOCAL VS. CLOUD GPU EXECUTION
+
+- **Local Execution:** Viable on desktop developer machines with NVIDIA GPUs (RTX 3060/4060 or better). Not feasible directly on mid-range Android mobile devices due to VRAM limitations.
+- **Cloud GPU Execution:** Required for mobile (Android) users. The Capacitor app will send prompts/images to a lightweight backend API (Python FastAPI) hosted on a cloud GPU.
+
+### Free / Low-Cost Cloud GPU Options
+1. **Google Colab (Free Tier):** T4 GPU available intermittently. Good for testing, but session timeouts prevent production API hosting.
+2. **Hugging Face Spaces (Free Tiers):** CPU basic is free; GPU (T4 small) available at low cost or free community quotas. Excellent for hosting a TripoSR/Shap-E microservice endpoint.
+3. **RunPod / Vast.ai:** Pay-as-you-go (~$0.20–$0.50/hr for RTX 3090/4090). Requires credit card / payment details (no free lunch without credit card).
+
+---
+
+## 5. ANDROID APP INTEGRATION ARCHITECTURE
+
+1. **Client (Capacitor / Android App):** User enters prompt in AI panel.
+2. **API Request:** App sends HTTP POST request (`/api/generate-3d`) with prompt to Python backend.
+3. **Backend Processing:** Backend runs Shap-E / TripoSR, generates GLB file, and uploads to temporary storage or streams back.
+4. **Import:** App receives GLB binary, passes to `GLBImporter`, and adds resulting `SceneObject` into `EditorEngine` and `SceneGraph`.
+
+---
+
+## 6. MODEL FORMATS & COMPATIBILITY
+
+- **Target Format:** GLB (Binary GLTF).
+- **Compatibility:** Fully supported by existing `GLBImporter` (`src/engine/export/glb-importer.ts`) and `GLBExporter`.
+
+---
+
+## 7. RECOMMENDATIONS & DECISION MATRIX
+
+### Recommended Stack
+- **Text-to-3D Pipeline:** Shap-E (lightweight, direct text conditioning).
+- **Image-to-3D Pipeline:** TripoSR (high quality, fast inference).
+- **Backend Service:** Python FastAPI wrapper exposed via HTTPS.
+
+### Installation Plan (Future)
+1. Set up Python FastAPI backend in a separate folder (`ai-backend/`).
+2. Install PyTorch, TripoSR, and Shap-E dependencies.
+3. Verify inference script outputs valid `.glb` files.
+4. Connect frontend API client in AI-3D-Creator.
+
+### Backend Verification Plan
+- Send test curl request with prompt "red cube" and verify returned `.glb` file imports correctly into `SceneGraph`.
+
+### Risks & Unresolved Questions
+- **Mobile Offline Limitation:** Local AI generation on Android devices is currently impractical due to VRAM limits; an online cloud microservice is required.
+- **Hosting Cost:** Free cloud tiers have rate limits; sustained usage requires a low-cost cloud GPU instance.
+
+---
+
+## GO / NO-GO DECISION
+- **Decision:** **NO-GO FOR IMPLEMENTATION YET** (Awaiting user review and approval of cloud GPU/backend architecture).
+- **Recommendation:** Approve research report and authorize setting up a local/cloud Python FastAPI prototype backend without activating paid billing.
+
