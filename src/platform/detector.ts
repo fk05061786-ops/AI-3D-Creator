@@ -13,15 +13,16 @@ export interface PlatformInfo {
   isBrowser: boolean;
 }
 
-export function detectPlatform(): PlatformInfo {
-  const isAndroid = typeof window !== 'undefined' && 
-    (window as any).Capacitor !== undefined && 
-    (window as any).Capacitor.getPlatform() === 'android';
+type PlatformWindow = Window & {
+  Capacitor?: { getPlatform(): string };
+  __TAURI__?: unknown;
+  __TAURI_INTERNALS__?: unknown;
+};
 
-  // Tauri injects __TAURI_INTERNALS__ or __TAURI__ into the window object
-  const isTauri = typeof window !== 'undefined' && 
-    ((window as any).__TAURI__ !== undefined || 
-     (window as any).__TAURI_INTERNALS__ !== undefined);
+export function detectPlatform(): PlatformInfo {
+  const host = typeof window !== 'undefined' ? (window as PlatformWindow) : null;
+  const isAndroid = host?.Capacitor?.getPlatform() === 'android';
+  const isTauri = !!host && (host.__TAURI__ !== undefined || host.__TAURI_INTERNALS__ !== undefined);
 
   let type: PlatformType = 'unknown';
   if (isAndroid) {

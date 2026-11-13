@@ -23,7 +23,7 @@ export interface ObjectMeta {
  * the hierarchy panel trivial.
  */
 export class SceneObject {
-  readonly three: THREE.Object3D;
+  three: THREE.Object3D;
   readonly meta: ObjectMeta;
 
   constructor(three: THREE.Object3D, meta: Partial<ObjectMeta> = {}) {
@@ -44,6 +44,20 @@ export class SceneObject {
     three.name = this.meta.name;
   }
 
+
+  /**
+   * True when the object is bound to a skeleton. The rigging system swaps
+   * the underlying node for a THREE.SkinnedMesh while keeping this wrapper.
+   */
+  get isSkinned(): boolean {
+    return this.three instanceof THREE.SkinnedMesh;
+  }
+
+  /** Name of the rig this object is bound to, if any. */
+  get rigName(): string | null {
+    const value = this.three.userData?.rigName;
+    return typeof value === 'string' ? value : null;
+  }
 
   applyMaterial(): void {
     const mesh = this.three as THREE.Mesh;

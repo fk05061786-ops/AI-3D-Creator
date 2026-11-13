@@ -1,11 +1,28 @@
 import { detectPlatform } from '../platform/detector';
 
+interface TauriBridge {
+  dialog: {
+    save(options: { defaultPath: string; filters: { name: string; extensions: string[] }[] }): Promise<string | null>;
+    open(options: { multiple: boolean; filters: { name: string; extensions: string[] }[] }): Promise<string | string[] | null>;
+  };
+  fs: {
+    writeTextFile(path: string, contents: string): Promise<void>;
+    readTextFile(path: string): Promise<string>;
+  };
+}
+
+function tauriBridge(): TauriBridge | null {
+  if (typeof window === 'undefined') return null;
+  return (window as Window & { __TAURI__?: TauriBridge }).__TAURI__ ?? null;
+}
+
 export async function saveProjectFileDialog(suggestedName: string, jsonContent: string): Promise<boolean> {
   const platform = detectPlatform();
-  if (platform.isDesktop && typeof window !== 'undefined' && (window as any).__TAURI__) {
+  const tauri = tauriBridge();
+  if (platform.isDesktop && tauri) {
     try {
-      const { save } = (window as any).__TAURI__.dialog;
-      const { writeTextFile } = (window as any).__TAURI__.fs;
+      const { save } = tauri.dialog;
+      const { writeTextFile } = tauri.fs;
       const filePath = await save({
         defaultPath: suggestedName,
         filters: [{ name: 'JSON Project', extensions: ['json'] }]
@@ -33,10 +50,11 @@ export async function saveProjectFileDialog(suggestedName: string, jsonContent: 
 
 export async function openProjectFileDialog(): Promise<string | null> {
   const platform = detectPlatform();
-  if (platform.isDesktop && typeof window !== 'undefined' && (window as any).__TAURI__) {
+  const tauri = tauriBridge();
+  if (platform.isDesktop && tauri) {
     try {
-      const { open } = (window as any).__TAURI__.dialog;
-      const { readTextFile } = (window as any).__TAURI__.fs;
+      const { open } = tauri.dialog;
+      const { readTextFile } = tauri.fs;
       const selected = await open({
         multiple: false,
         filters: [{ name: 'JSON Project', extensions: ['json'] }]

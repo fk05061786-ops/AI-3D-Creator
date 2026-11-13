@@ -1,4 +1,6 @@
-import { SceneGraph } from './scene-graph';
+import { SceneGraph, SerializedScene } from './scene-graph';
+import type { SerializedRig } from '../rigging/skeleton';
+import type { SerializedAnimationClip } from '../animation/animation-system';
 
 /**
  * Project persistence. A project is a plain JSON document with the
@@ -11,14 +13,21 @@ export interface Project {
   name: string;
   createdAt: number;
   updatedAt: number;
-  scene: unknown;
+  scene: SerializedScene;
+  rig?: SerializedRig | null;
+  animations?: SerializedAnimationClip[] | null;
+}
+
+export interface ProjectExtras {
+  rig?: SerializedRig | null;
+  animations?: SerializedAnimationClip[] | null;
 }
 
 export class ProjectManager {
   private readonly prefix = 'ai3d:projects';
 
   /** Serialize the current scene graph into a Project document. */
-  createProject(name: string, graph: SceneGraph): Project {
+  createProject(name: string, graph: SceneGraph, extras: ProjectExtras = {}): Project {
     const now = Date.now();
     return {
       version: 1,
@@ -26,6 +35,8 @@ export class ProjectManager {
       createdAt: now,
       updatedAt: now,
       scene: graph.toJSON(),
+      rig: extras.rig ?? null,
+      animations: extras.animations ?? null,
     };
   }
 
@@ -37,7 +48,9 @@ export class ProjectManager {
       all[project.name] = project;
       localStorage.setItem(this.prefix, JSON.stringify(all));
     } catch (err) {
-      throw new Error('Could not save project: ' + (err as Error).message);
+      const error = new Error('Could not save project: ' + (err as Error).message);
+      Object.assign(error, { cause: err });
+      throw error;
     }
   }
 

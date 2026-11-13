@@ -138,7 +138,7 @@ export class Inspector {
 
     const seg = el('div', { className: 'seg' });
     for (const b of this.modeButtons) seg.appendChild(b);
-    this.setMode(this.engine.transform.controls.mode as any);
+    this.setMode(this.engine.transform.controls.mode as 'translate' | 'rotate' | 'scale');
 
     const numInput = (axis: 'x' | 'y' | 'z', type: 'pos' | 'rot' | 'scale') => {
       const val = type === 'rot' ? THREE.MathUtils.radToDeg(obj.three.rotation[axis]) : (type === 'scale' ? obj.three.scale[axis] : obj.three.position[axis]);

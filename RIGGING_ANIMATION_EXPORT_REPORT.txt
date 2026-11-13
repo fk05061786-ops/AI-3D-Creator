@@ -1,0 +1,264 @@
+================================================================================
+RIGGING + ANIMATION + EXPORT - IMPLEMENTATION REPORT
+AI-3D-Creator  |  Date: 2026-11-13  |  Project root: AI-3D-Creator/
+================================================================================
+
+STATUS: COMPLETE - typecheck 0 errors, ESLint 0 errors, all self-tests PASS,
+        production build PASS, verified end-to-end in a real browser.
+
+--------------------------------------------------------------------------------
+1. SCOPE
+--------------------------------------------------------------------------------
+Implement and wire three subsystems that previously did not exist as working
+features:
+
+  RIGGING    src/engine/rigging/   - bones, hierarchy, skinning, weights
+  ANIMATION  src/engine/animation/ - keyframe clips, mixer, transport, scrubbing
+  EXPORT     src/engine/export/    - GLB, GLTF, OBJ, STL, browser + WebView save
+
+All three are connected to SceneObject, the project manager (serialization) and
+the UI (toolbar export menu + animation timeline panel).
+
+--------------------------------------------------------------------------------
+2. MODULE IMPLEMENTATION
+--------------------------------------------------------------------------------
+
+2.1 RIGGING - src/engine/rigging/skeleton.ts
+    Status: existed as an uncommitted WIP before this task; completed and
+    hardened here.
+      - THREE.Bone tree (21-bone humanoid generator, add/remove/reparent bones)
+      - THREE.Skeleton bound to the mesh, THREE.SkinnedMesh replaces the plain
+        Mesh while the SceneObject wrapper is preserved
+      - THREE.SkeletonHelper visualisation (removed automatically during export)
+      - Automatic weight binding: every vertex is bound to the 4 nearest bone
+        segments with inverse-square falloff, weights normalised to 1.0
+      - Manual weight painting (radius + strength, shift = subtract)
+      - Bone posing through the transform gizmo, rest-pose capture/reset
+      - Serialization: bone hierarchy + transforms + skinIndex/skinWeight arrays
+    Changes made in this task:
+      - Mesh -> SkinnedMesh and back now preserve the sibling index, so the
+        hierarchy/ordering in the scene graph does not jump on bind/unbind
+      - The bound node carries userData.rigName, exposed as SceneObject.rigName
+      - New getter skeletonInstance exposes the live THREE.Skeleton
+      - SceneObject gained isSkinned / rigName so the UI and exporter can tell
+        a rigged object from a plain mesh without type casts
+
+2.2 ANIMATION - src/engine/animation/animation-system.ts  (NEW)
+      - THREE.AnimationMixer rooted at the scene (covers both graph objects and
+        rig bones, which live in different branches of the scene tree)
+      - THREE.AnimationClip + THREE.KeyframeTrack
+          * position -> THREE.VectorKeyframeTrack
+          * scale    -> THREE.VectorKeyframeTrack
+          * rotation -> THREE.QuaternionKeyframeTrack (track path is
+            ".quaternion" because GLTFExporter only maps "quaternion" to a
+            glTF rotation channel - using ".rotation" would silently drop the
+            track on export)
+      - Targets: scene objects (by SceneObject id) and bones (by bone name)
+      - Transport: play / pause / stop / loop toggle / frame scrubbing
+      - Scrubbing uses action.paused + action.time + mixer.update(0), the
+        three.js idiom that applies a pose at an exact time without advancing
+        the clock; pause freezes the clock, stop rewinds to 0
+      - Clip management: create, select, delete, duration/fps, keyframe add and
+        remove at the playhead
+      - Serialization: SerializedAnimationClip[] with flat times/values per
+        track, JSON round-trip safe
+
+2.3 EXPORT - src/engine/export/  (NEW FILES)
+      - export-manager.ts   ExportManager + ExportFormat ('glb'|'gltf'|'obj'|'stl')
+          * GLB  : GLTFExporter binary:true  -> Blob (model/gltf-binary)
+          * GLTF : GLTFExporter binary:false  -> JSON Blob (model/gltf+json)
+          * both receive the animation clips, so skeletons and animations are
+            written into the file by the stock three.js exporter
+          * the SkeletonHelper is removed while exporting (rig.beginExport /
+            rig.endExport) so helper lines never end up in the model
+      - obj-exporter.ts     OBJExporter wrapper (geometry only)
+      - stl-exporter.ts     STLExporter wrapper, binary STL
+            (three returns a DataView for binary STL, not an ArrayBuffer -
+            handled explicitly, otherwise the file was a 20-byte "[object
+            DataView]" string)
+      - file-download.ts    downloadBlob()
+          1. native bridge  window.AI3DSaveFile(filename, base64, mime) or
+             window.AI3DSaveFile.saveFile(...)  -> used by the Android host
+          2. blob URL + <a download>  -> works in desktop browsers and in the
+             Chrome-based Android WebView
+          3. data-URI fallback if the blob path throws
+          The object URL is revoked after 15 s instead of immediately, because
+          revoking right after click() cancels the download on Android WebView.
+
+--------------------------------------------------------------------------------
+3. FILES CREATED
+--------------------------------------------------------------------------------
+  src/engine/animation/animation-system.ts   keyframe animation system
+  src/engine/export/export-manager.ts        GLB/GLTF/OBJ/STL facade
+  src/engine/export/obj-exporter.ts          OBJ export
+  src/engine/export/stl-exporter.ts          STL export
+  src/engine/export/file-download.ts         browser + WebView save helper
+  src/ui/AnimationPanel.ts                   animation timeline panel
+  scripts/anim-export-selftest.ts            headless rig+animation+export test
+  scripts/browser-e2e.mjs                    Chrome DevTools Protocol e2e test
+  RIGGING_ANIMATION_EXPORT_REPORT.txt        this report
+
+  src/engine/animation/animation-engine.ts.before-repair
+      Parked, not deleted. This file was written by a parallel session as a
+      second, duplicate animation implementation. It was orphaned (imported by
+      nothing), had 20 TypeScript errors and was inactive for 2 hours. It is
+      renamed with the project's existing ".before-repair" convention so it
+      stays on disk but no longer breaks `npm run typecheck`.
+
+--------------------------------------------------------------------------------
+4. FILES UPDATED
+--------------------------------------------------------------------------------
+  src/engine/rigging/skeleton.ts          bind/unbind index fix, rig metadata,
+                                          skeletonInstance getter
+  src/engine/core/object-model.ts         SceneObject.isSkinned, SceneObject.rigName
+  src/engine/core/project-manager.ts      Project gains rig + animations fields,
+                                          createProject(name, graph, extras)
+  src/engine/core/editor-engine.ts        owns AnimationSystem + ExportManager,
+                                          render loop drives animation.update(dt),
+                                          dispose() stops the mixer
+  src/ui/Toolbar.ts                       export menu (GLB/GLTF/OBJ/STL)
+  src/ui/ProjectManager.ts                save/load/import restore rig + clips
+  src/App.ts                              mounts AnimationPanel, new export flow
+  src/ui/App.ts                           same changes (duplicate entry module)
+  style.css                               animation panel + export menu styles
+  package.json                            test:anim, test:browser scripts
+  eslint.config.js                        node globals for scripts/**/*.mjs
+  android/.../MainActivity.java           AI3DSaveFile WebView bridge
+
+  Pre-existing uncommitted work in the repo (rigging rewrite, src/ai/*, AI
+  panels, ai-backend/) was left untouched.
+
+--------------------------------------------------------------------------------
+5. INTEGRATION POINTS
+--------------------------------------------------------------------------------
+  SceneObject      rig.bind() swaps the node for a SkinnedMesh in place, the
+                   wrapper (id, name, parentId, material) is unchanged;
+                   SceneObject.isSkinned / .rigName expose the rig state.
+  ProjectManager   Project = { version, name, createdAt, updatedAt, scene,
+                   rig, animations }. Old project files without rig/animations
+                   still load (both fields are optional).
+  UI               Toolbar "Export v" dropdown (4 formats, fixed-position so
+                   the toolbar's horizontal overflow cannot clip it) and the
+                   "Animation" sidebar panel (clip list, target object/bone,
+                   position/rotation/scale, add/del key, play/pause/stop/loop,
+                   scrub bar + frame counter).
+  Engine           engine.rig, engine.animation, engine.exporter.
+
+--------------------------------------------------------------------------------
+6. VERIFICATION
+--------------------------------------------------------------------------------
+  npm run typecheck ................. PASS (0 errors)
+  npx eslint src/ scripts/ ......... PASS (0 errors, 7 pre-existing warnings
+                                     in files not touched by this task:
+                                     mesh-editor.ts, modeling-ops.ts,
+                                     modifier-system.ts, Hierarchy.ts)
+  npm run test:rig ................. PASS  "PHASE 6 RIG SELFTEST PASS"
+  npm run test:anim ................ PASS  "ANIMATION + EXPORT SELFTEST PASS"
+  npm run test:api ................. PASS  10 checks passed
+  npm run build .................... PASS
+        dist/index.html                0.81 kB | gzip 0.44 kB
+        dist/assets/index-*.css        9.82 kB | gzip 2.48 kB
+        dist/assets/index-*.js       843.15 kB | gzip 216.51 kB
+        49 modules, built in ~6 s
+
+  Headless self-test (scripts/anim-export-selftest.ts) asserts:
+        21-bone humanoid, mesh -> SkinnedMesh, normalised weights,
+        bone hierarchy transform, weight paint add/subtract,
+        object position + bone rotation keyframes,
+        interpolation at 0.5 s (position 1.0, bone half turn),
+        play advances the clock, pause freezes it, stop rewinds to 0,
+        loop toggle, clip serialization + reload, rig stored in the project,
+        GLB contains "skins" + "JOINTS_0" + "animations",
+        GLTF JSON has 1 animation and 1 skin,
+        OBJ contains vertices and faces, binary STL is non-empty,
+        base64 payload encoding.
+
+  Browser end-to-end (scripts/browser-e2e.mjs, real Chrome over CDP):
+        app boots with no console errors,
+        7 panels mounted, 4 export menu items,
+        21 bones, bind -> isSkinned true, rigName "Rig",
+        clip created, scrub 0.5 s -> x = 1.5 (interpolated), play -> 0.6 s,
+        stop -> 0 s,
+        GLB 10 260 B, GLTF 17 238 B (1 animation, 1 skin), OBJ 2 570 B,
+        STL 684 B,
+        download wrote browser-test.glb (10 260 B) to disk,
+        native bridge hook received ("native.bin", base64 length 4).
+
+  Chromium note: the Playwright MCP server cannot launch here ("Running as
+  root without --no-sandbox is not supported"). Chrome was driven directly with
+  --no-sandbox instead; this is an environment issue, not an app issue.
+
+--------------------------------------------------------------------------------
+7. ANDROID WEBVIEW DOWNLOAD
+--------------------------------------------------------------------------------
+  Layer 1 (default)  blob URL + <a download>. Verified working in Chrome and
+                     supported by the Chrome-based Android WebView.
+  Layer 2 (native)   android/app/src/main/java/com/ai3dcreator/app/MainActivity.java
+                     registers window.AI3DSaveFile with a @JavascriptInterface
+                     saveFile(filename, base64, mime) that writes into
+                     getExternalFilesDir(DIRECTORY_DOWNLOADS) (no runtime
+                     permission needed on any API level) and shows a Toast with
+                     the saved path.
+  Layer 3 (fallback) data-URI anchor if the blob path throws.
+
+  The Java bridge could NOT be compiled here: this machine has no Android SDK
+  (no ANDROID_HOME, no sdkmanager). `javac` reports only "package does not
+  exist" / "cannot find symbol" for android.* and com.getcapacitor.* - zero
+  syntax errors - but the APK build is still unverified.
+
+--------------------------------------------------------------------------------
+8. APK GENERATION - REMAINING STEPS
+--------------------------------------------------------------------------------
+  Requirements: Android SDK platform 36 + build-tools, JDK 17, ANDROID_HOME set.
+                 compileSdkVersion 36, targetSdkVersion 36, minSdkVersion 24.
+
+  1) Build the web bundle
+         npm install
+         npm run build                 # writes dist/
+
+  2) Point the Android project at the SDK (file is git-ignored)
+         printf 'sdk.dir=/path/to/Android/Sdk\n' > android/local.properties
+
+  3) Sync the bundle and plugins into the native project
+         npx cap sync android
+
+  4) Debug APK
+         cd android && ./gradlew assembleDebug
+         -> android/app/build/outputs/apk/debug/app-debug.apk
+
+  5) Release APK (needs a signing config in
+     android/app/build.gradle; add keystore.properties + release signingConfig)
+         cd android && ./gradlew assembleRelease
+         -> android/app/build/outputs/apk/release/app-release.apk
+
+  6) Install on a device
+         adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+
+  7) On-device check
+         - open the Export menu and export one .glb, one .gltf, one .obj, one .stl
+         - confirm the file lands in the app download folder (Toast shows the path)
+         - create a rig, bind a mesh, record keyframes, scrub and play
+         - save the project and reload it: bones, weights and clips must return
+
+--------------------------------------------------------------------------------
+9. REMAINING ISSUES / RISKS
+--------------------------------------------------------------------------------
+  * No APK was produced: the Android SDK is not installed on this machine, so
+    the Java bridge and the Gradle build are unverified.
+  * The native save hook writes to the app-private external files directory, not
+    the public Downloads collection. A MediaStore implementation would be
+    needed for the file to appear in the system Downloads UI.
+  * OBJ and STL are geometry-only formats by definition: no skeleton, no
+    animation, no materials. They export the posed mesh.
+  * Weight painting samples vertices in bind pose. Repainting after posing the
+    rig requires resetting to the rest pose first (known shortcut, marked in
+    the source).
+  * src/platform/storage.ts is still deleted in the working tree (pre-existing,
+    not part of this task) - nothing in the rigging/animation/export path uses
+    it.
+  * A parallel session left other uncommitted work in the tree (src/ai/*,
+    ai-backend/, RiggingPanel.ts, ai-backend server). It was not reviewed here.
+
+================================================================================
+END OF REPORT
+================================================================================

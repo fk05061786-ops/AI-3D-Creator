@@ -1,5 +1,6 @@
 import { el, modal, text } from './UILite';
 import { ProjectManager } from '../engine/core/project-manager';
+import type { Project } from '../engine/core/project-manager';
 import { EditorEngine } from '../engine/core/editor-engine';
 
 type ProjectAction = 'save' | 'load' | 'import';
@@ -94,7 +95,10 @@ export class ProjectManagerUI {
   }
 
   private async doSave(): Promise<void> {
-    const project = this.pm.createProject(this.nameInput.value, this.engine.graph);
+    const project = this.pm.createProject(this.nameInput.value, this.engine.graph, {
+      rig: this.engine.rig.serialize(),
+      animations: this.engine.animation.serialize(),
+    });
     this.pm.save(project);
     this.updateStatus('Saved "' + project.name + '"');
     this.hideModal();
@@ -106,8 +110,7 @@ export class ProjectManagerUI {
       this.updateStatus('Project not found');
       return;
     }
-    this.engine.graph.fromJSON(project.scene);
-    this.engine.resetCamera();
+    this.restore(project);
     this.updateStatus('Loaded "' + name + '"');
     this.hideModal();
   }
@@ -120,10 +123,17 @@ export class ProjectManagerUI {
 
   private async doImport(file: File): Promise<void> {
     const project = await this.pm.import(file);
-    this.engine.graph.fromJSON(project.scene);
-    this.engine.resetCamera();
+    this.restore(project);
     this.updateStatus('Imported "' + project.name + '"');
     this.hideModal();
+  }
+
+  /** Rebuild the scene, then re-attach the rig and animation clips. */
+  private restore(project: Project): void {
+    this.engine.graph.fromJSON(project.scene);
+    if (project.rig) this.engine.rig.load(project.rig, this.engine.graph);
+    this.engine.animation.load(project.animations ?? []);
+    this.engine.resetCamera();
   }
 
   private updateStatus(msg: string): void {

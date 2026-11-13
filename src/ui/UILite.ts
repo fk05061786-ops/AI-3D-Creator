@@ -49,7 +49,7 @@ export function button(label: string, onClick: () => void, className = ''): HTML
   return el('button', { className, on: { click: onClick } }, label);
 }
 
-export function input<K extends keyof HTMLElementTagNameMap>(attrs: Partial<HTMLInputElement> & { onInput?: (v: string) => void }): HTMLInputElement {
+export function input(attrs: Partial<HTMLInputElement> & { onInput?: (v: string) => void }): HTMLInputElement {
   const node = document.createElement('input');
   for (const [key, value] of Object.entries(attrs)) {
     if (key === 'onInput') {
@@ -59,7 +59,7 @@ export function input<K extends keyof HTMLElementTagNameMap>(attrs: Partial<HTML
     } else if (key === 'onBlur') {
       node.addEventListener('blur', () => (value as () => void)());
     } else {
-      (node as any)[key] = value;
+      (node as unknown as Record<string, unknown>)[key] = value;
     }
   }
   return node;

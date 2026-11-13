@@ -16,8 +16,6 @@ export class PrimitiveFactory {
 
   private buildMesh(type: PrimitiveType): THREE.Mesh {
     let geometry: THREE.BufferGeometry;
-    let material: THREE.MeshStandardMaterial;
-
     switch (type) {
       case 'cube':
         geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
@@ -33,7 +31,7 @@ export class PrimitiveFactory {
         break;
     }
 
-    material = new THREE.MeshStandardMaterial({
+    const material = new THREE.MeshStandardMaterial({
       color: this.defaultColor(type),
       roughness: 0.6,
       metalness: 0,

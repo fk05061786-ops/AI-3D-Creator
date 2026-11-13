@@ -5,6 +5,26 @@ import { PrimitiveFactory } from '../modeling/primitives';
 export type SelectionChangeHandler = (object: SceneObject | null) => void;
 export type ObjectsChangeHandler = () => void;
 
+export interface SerializedSceneObject {
+  id: string;
+  name: string;
+  primitive?: PrimitiveType;
+  color?: string;
+  roughness?: number;
+  metalness?: number;
+  visible?: boolean;
+  locked?: boolean;
+  parentId?: string | null;
+  position?: [number, number, number];
+  rotation?: [number, number, number];
+  scale?: [number, number, number];
+}
+
+export interface SerializedScene {
+  version?: number;
+  objects?: SerializedSceneObject[];
+}
+
 /**
  * Owns the root Group in the scene and the list of SceneObjects.
  * Selection, hierarchy, add/duplicate/delete all flow through here so the
@@ -100,7 +120,7 @@ export class SceneGraph {
   }
 
   /** Serialize the whole graph to a plain JSON structure. */
-  toJSON(): unknown {
+  toJSON(): SerializedScene {
     return {
       version: 1,
       objects: this.objects.map((o) => ({
@@ -121,13 +141,13 @@ export class SceneGraph {
   }
 
   /** Rebuild the graph from a previously serialized structure. */
-  fromJSON(data: any): void {
+  fromJSON(data: SerializedScene): void {
     this.root.clear();
     this.objects.length = 0;
     this._selected = null;
 
     const map = new Map<string, SceneObject>();
-    const items: any[] = Array.isArray(data?.objects) ? data.objects : [];
+    const items = Array.isArray(data?.objects) ? data.objects : [];
 
     // First pass: create every object (geometry only for primitives).
     for (const item of items) {

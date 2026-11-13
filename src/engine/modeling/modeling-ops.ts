@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { BufferGeometry } from 'three';
 import { SceneObject } from '../core/object-model';
 
 /**
  * Helper class for modeling operations.
  */
 export class ModelingOps {
+    private _originalGeometry: THREE.BufferGeometry | null = null;
+    private _subdivisionLevel: number = 0;
   /**
    * Extrude selected faces along their normals.
    * @param object The object to modify.

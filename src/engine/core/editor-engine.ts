@@ -8,6 +8,20 @@ import { SculptingEngine } from '../sculpting/sculpting-engine';
 import { ModifierSystem } from '../modifiers/modifier-system';
 import { ModelingOps } from '../modeling/modeling-ops';
 import { MeshEditor } from '../modeling/mesh-editor';
+import { SkeletonRig } from '../rigging/skeleton';
+import { AnimationSystem } from '../animation/animation-system';
+import { ExportManager } from '../export/export-manager';
+
+interface GeometryHistory {
+  id: string;
+  originalGeometry: THREE.BufferGeometry;
+}
+
+type HistoryEntry =
+  | { action: 'add' | 'delete'; data: SceneObject }
+  | { action: 'clear'; data: SceneObject[] }
+  | { action: 'transform'; data: { id: string; position: THREE.Vector3; rotation: THREE.Euler; scale: THREE.Vector3 } }
+  | { action: 'extrude' | 'subdivide' | 'inset' | 'bevel'; data: GeometryHistory };
 
 /**
  * Top-level engine with undo/redo support.
@@ -23,6 +37,9 @@ export class EditorEngine {
   readonly sculpting: SculptingEngine;
   readonly modifiers: ModifierSystem;
   readonly modelingOps: ModelingOps;
+  readonly rig: SkeletonRig;
+  readonly animation: AnimationSystem;
+  readonly exporter: ExportManager;
 
   get isSculpting(): boolean {
     return this._isSculpting;
@@ -44,9 +61,10 @@ export class EditorEngine {
   private _pointer = new THREE.Vector2();
   private _lastSelection: THREE.Object3D | null = null;
   private _isSculpting: boolean = false;
-  private _undoStack: { action: string; data: any }[] = [];
-  private _redoStack: { action: string; data: any }[] = [];
+  private _undoStack: HistoryEntry[] = [];
+  private _redoStack: HistoryEntry[] = [];
   private _isEditMode: boolean = false;
+  private _originalGeometry: THREE.BufferGeometry | null = null;
 
   constructor(viewport: HTMLElement) {
     this.scene = new Scene();
@@ -80,6 +98,9 @@ export class EditorEngine {
     this.sculpting = new SculptingEngine();
     this.modifiers = new ModifierSystem();
     this.modelingOps = new ModelingOps();
+    this.rig = new SkeletonRig(this.scene.three);
+    this.animation = new AnimationSystem(this.scene.three, this.graph, this.rig);
+    this.exporter = new ExportManager(this.scene.three, this.rig, this.animation);
 
     // While the user drags the transform gizmo, pause orbiting so the
     // two pointer handlers don't fight each other.
@@ -109,8 +130,13 @@ export class EditorEngine {
 
     }
   start(): void {
+    let previous = performance.now();
     const tick = () => {
       requestAnimationFrame(tick);
+      const now = performance.now();
+      const delta = Math.min((now - previous) / 1000, 0.1);
+      previous = now;
+      this.animation.update(delta);
       this.orbit.update();
       this.renderer.render(this.scene.three, this.camera);
     };
@@ -126,7 +152,9 @@ export class EditorEngine {
 
   private onPointerDown(e: PointerEvent): void {
     if (this.transform.dragging) return;
-    this._pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+    this.updatePointer(e);
+
+    if (this.tryPaintRig(e)) return;
 
     if (this._isSculpting && this.graph.selected) {
       this._raycaster.setFromCamera(this._pointer, this.camera);
@@ -156,7 +184,9 @@ export class EditorEngine {
 
   private onPointerMove(e: PointerEvent): void {
     if (this.transform.dragging) return;
-    this._pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+    this.updatePointer(e);
+
+    if (e.buttons === 1 && this.tryPaintRig(e)) return;
 
     if (this._isSculpting && this.graph.selected && e.buttons === 1) {
       this._raycaster.setFromCamera(this._pointer, this.camera);
@@ -187,6 +217,34 @@ export class EditorEngine {
     if (this.transform.dragging) return;
     if (this._lastSelection) this.selectByNode(this._lastSelection);
     this._lastSelection = null;
+  }
+
+  private updatePointer(e: PointerEvent): void {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this._pointer.set(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1
+    );
+  }
+
+  private tryPaintRig(e: PointerEvent): boolean {
+    if (!this.rig.paintEnabled || !this.rig.targetMesh || !this.rig.activeBone) return false;
+    this.updatePointer(e);
+    this._raycaster.setFromCamera(this._pointer, this.camera);
+    const hits = this._raycaster.intersectObject(this.rig.targetMesh, true);
+    if (hits.length > 0) {
+      this.orbit.enabled = false;
+      this.rig.paint(hits[0].point, !e.shiftKey);
+    }
+    return true;
+  }
+
+  selectRigBone(name: string): void {
+    const bone = this.rig.selectBone(name);
+    if (!bone) return;
+    this.transform.attach(bone);
+    this.transform.enabled = true;
+    this.transform.setMode('rotate');
   }
 
   private firstSelectable(hits: THREE.Intersection[]): THREE.Object3D | null {
@@ -242,159 +300,105 @@ export class EditorEngine {
    */
   inset(object: SceneObject, amount: number = 0.1): void {
     if (!(object.three instanceof THREE.Mesh)) return;
-    this.saveState("inset", {
-      id: object.meta.id,
-      originalGeometry: object.three.geometry.clone()
+    this.saveState({
+      action: 'inset',
+      data: { id: object.meta.id, originalGeometry: object.three.geometry.clone() },
     });
     this.modelingOps.inset(object, amount);
   }
 
   bevel(object: SceneObject, width: number = 0.05, segments: number = 1): void {
     if (!(object.three instanceof THREE.Mesh)) return;
-    this.saveState("bevel", {
-      id: object.meta.id,
-      originalGeometry: object.three.geometry.clone()
+    this.saveState({
+      action: 'bevel',
+      data: { id: object.meta.id, originalGeometry: object.three.geometry.clone() },
     });
     this.modelingOps.bevel(object, width, segments);
   }
 
-  saveState(action: string, data: any): void {
-    this._undoStack.push({ action, data });
+  saveState(entry: HistoryEntry): void {
+    this._undoStack.push(entry);
     this._redoStack = [];
   }
 
   extrude(object: SceneObject, amount: number): void {
     if (!(object.three instanceof THREE.Mesh)) return;
-    this.saveState('extrude', {
-      id: object.meta.id,
-      originalGeometry: object.three.geometry.clone()
+    this.saveState({
+      action: 'extrude',
+      data: { id: object.meta.id, originalGeometry: object.three.geometry.clone() },
     });
     this.modelingOps.extrude(object, amount);
   }
 
   subdivide(object: SceneObject, level: number = 1): void {
     if (!(object.three instanceof THREE.Mesh)) return;
-    this.saveState('subdivide', {
-      id: object.meta.id,
-      originalGeometry: object.three.geometry.clone()
+    this.saveState({
+      action: 'subdivide',
+      data: { id: object.meta.id, originalGeometry: object.three.geometry.clone() },
     });
     this.modelingOps.subdivide(object, level);
   }
 
   undo(): void {
     if (this._undoStack.length === 0) return;
-
-    const { action, data } = this._undoStack.pop()!;
-    this._redoStack.push({ action, data });
-
-    switch (action) {
-      case 'add':
-        this.graph.remove(data);
-        break;
-      case 'delete':
-        this.graph.add(data);
-        break;
-      case 'transform':
-        const obj = this.graph.find(data.id);
-        if (obj) {
-          obj.three.position.copy(data.position);
-          obj.three.rotation.copy(data.rotation);
-          obj.three.scale.copy(data.scale);
-        }
-        break;
-      case 'extrude':
-        const extrudedObj = this.graph.find(data.id);
-        if (extrudedObj && extrudedObj.three instanceof THREE.Mesh) {
-          extrudedObj.three.geometry = data.originalGeometry;
-          extrudedObj.three.geometry.computeVertexNormals();
-        }
-        break;
-      case 'subdivide':
-        const subdividedObj = this.graph.find(data.id);
-        if (subdividedObj && subdividedObj.three instanceof THREE.Mesh) {
-          subdividedObj.three.geometry = data.originalGeometry;
-          subdividedObj.three.geometry.computeVertexNormals();
-        }
-        break;
-      case "inset": {
-        const obj = this.graph.find(data.id);
-        if (obj && obj.three instanceof THREE.Mesh) {
-          obj.three.geometry = data.originalGeometry;
-          obj.three.geometry.computeVertexNormals();
-        }
-        break;
-      }
-      case "bevel": {
-        const obj = this.graph.find(data.id);
-        if (obj && obj.three instanceof THREE.Mesh) {
-          obj.three.geometry = data.originalGeometry;
-          obj.three.geometry.computeVertexNormals();
-        }
-        break;
-      }
-      // Add more cases for other actions
-    }
+    const entry = this._undoStack.pop()!;
+    this._redoStack.push(entry);
+    this.applyHistory(entry, 'undo');
   }
 
   redo(): void {
     if (this._redoStack.length === 0) return;
+    const entry = this._redoStack.pop()!;
+    this._undoStack.push(entry);
+    this.applyHistory(entry, 'redo');
+  }
 
-    const { action, data } = this._redoStack.pop()!;
-    this._undoStack.push({ action, data });
-
-    switch (action) {
-      case 'add':
-        this.graph.add(data);
+  private applyHistory(entry: HistoryEntry, direction: 'undo' | 'redo'): void {
+    switch (entry.action) {
+      case 'add': {
+        if (direction === 'undo') this.graph.remove(entry.data);
+        else this.graph.add(entry.data);
         break;
-      case 'delete':
-        this.graph.remove(data);
+      }
+      case 'delete': {
+        if (direction === 'undo') this.graph.add(entry.data);
+        else this.graph.remove(entry.data);
         break;
-      case 'transform':
-        const obj = this.graph.find(data.id);
+      }
+      case 'clear': {
+        for (const obj of entry.data) {
+          if (direction === 'undo') this.graph.add(obj);
+          else this.graph.remove(obj);
+        }
+        break;
+      }
+      case 'transform': {
+        const obj = this.graph.find(entry.data.id);
         if (obj) {
-          obj.three.position.copy(data.position);
-          obj.three.rotation.copy(data.rotation);
-          obj.three.scale.copy(data.scale);
+          obj.three.position.copy(entry.data.position);
+          obj.three.rotation.copy(entry.data.rotation);
+          obj.three.scale.copy(entry.data.scale);
         }
         break;
+      }
       case 'extrude':
-        const extrudedObj = this.graph.find(data.id);
-        if (extrudedObj && extrudedObj.three instanceof THREE.Mesh) {
-          extrudedObj.three.geometry = data.originalGeometry;
-          extrudedObj.three.geometry.computeVertexNormals();
-        }
-        break;
       case 'subdivide':
-        const subdividedObj = this.graph.find(data.id);
-        if (subdividedObj && subdividedObj.three instanceof THREE.Mesh) {
-          subdividedObj.three.geometry = data.originalGeometry;
-          subdividedObj.three.geometry.computeVertexNormals();
-        }
-        break;
-      case "inset": {
-        const obj = this.graph.find(data.id);
+      case 'inset':
+      case 'bevel': {
+        const obj = this.graph.find(entry.data.id);
         if (obj && obj.three instanceof THREE.Mesh) {
-          obj.three.geometry = data.originalGeometry;
+          obj.three.geometry = entry.data.originalGeometry;
           obj.three.geometry.computeVertexNormals();
         }
         break;
       }
-      case "bevel": {
-        const obj = this.graph.find(data.id);
-        if (obj && obj.three instanceof THREE.Mesh) {
-          obj.three.geometry = data.originalGeometry;
-          obj.three.geometry.computeVertexNormals();
-        }
-        break;
-      }
-      // Add more cases for other actions
     }
   }
 
   addPrimitive(type: 'cube' | 'sphere' | 'cylinder' | 'plane'): SceneObject | null {
     const obj = this.graph.addPrimitive(type);
     if (obj) {
-      this.saveState('add', obj);
+      this.saveState({ action: 'add', data: obj });
     }
     return obj;
   }
@@ -402,7 +406,7 @@ export class EditorEngine {
   deleteSelected(): void {
     const sel = this.graph.selected;
     if (sel) {
-      this.saveState('delete', sel);
+      this.saveState({ action: 'delete', data: sel });
       this.graph.remove(sel);
     }
   }
@@ -411,14 +415,14 @@ export class EditorEngine {
     const sel = this.graph.selected;
     const dup = sel ? this.graph.duplicate(sel) : null;
     if (dup) {
-      this.saveState('add', dup);
+      this.saveState({ action: 'add', data: dup });
     }
     return dup;
   }
 
   clear(): void {
     const objects = [...this.graph.objects];
-    this.saveState('clear', objects);
+    this.saveState({ action: 'clear', data: objects });
     for (const obj of objects) this.graph.remove(obj);
   }
 
@@ -433,6 +437,8 @@ export class EditorEngine {
   }
 
   dispose(): void {
+    this.animation.dispose();
+    this.rig.dispose();
     this.transform.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();

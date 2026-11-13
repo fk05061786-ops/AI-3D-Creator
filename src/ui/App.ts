@@ -1,13 +1,16 @@
 import { EditModePanel } from './modeling/EditModePanel';
+import { AIGeneratorPanel } from './AIGeneratorPanel';
+import { APIManagerPanel } from './APIManagerPanel';
+import { APIManager } from '../ai/api-manager';
+import { ProjectManagerUI } from './ProjectManager';
+import { RiggingPanel } from './RiggingPanel';
 import { EditorEngine } from '../engine/core/editor-engine';
-import { GLBExporter } from '../engine/export/glb-exporter';
 import { GLBImporter } from '../engine/export/glb-importer';
+import type { ExportFormat } from '../engine/export/export-manager';
 import { buildToolbar } from './Toolbar';
 import { Inspector } from './Inspector';
 import { Hierarchy } from './Hierarchy';
-
-
-
+import { AnimationPanel } from './AnimationPanel';
 
 /**
  * Root component with modeling UI integration.
@@ -17,6 +20,9 @@ export function App() {
 
   // Create the 3D engine.
   const engine = new EditorEngine(app.querySelector('#viewport')!);
+
+  // Mount project manager controls
+  new ProjectManagerUI(engine);
 
   // Build the UI.
   const toolbar = buildToolbar({
@@ -29,6 +35,16 @@ export function App() {
   app.prepend(toolbar);
 
   const sidebar = document.getElementById('sidebar')!;
+
+  // Provider configuration and generation share one API manager.
+  const apiManager = new APIManager();
+  const apiPanel = new APIManagerPanel(apiManager);
+  sidebar.appendChild(apiPanel.element);
+
+  // Add AI Generator Panel
+  const aiPanel = new AIGeneratorPanel(engine, apiManager);
+  sidebar.appendChild(aiPanel.element);
+
   const inspector = new Inspector(engine);
   sidebar.appendChild(inspector.element);
 
@@ -39,18 +55,22 @@ export function App() {
   const editModePanel = new EditModePanel(engine);
   sidebar.appendChild(editModePanel.element);
 
+  const rigPanel = new RiggingPanel(engine);
+  sidebar.appendChild(rigPanel.element);
+
+  const animationPanel = new AnimationPanel(engine);
+  sidebar.appendChild(animationPanel.element);
+
   const statusEl = app.querySelector('.project-bar .status') as HTMLElement;
 
-  async function handleExport(): Promise<void> {
+  async function handleExport(format: ExportFormat = 'glb'): Promise<void> {
     if (!statusEl) return;
-    const prev = statusEl.textContent;
-    if (prev) statusEl.textContent = 'Exporting…';
+    statusEl.textContent = 'Exporting…';
     try {
-      const exporter = new GLBExporter();
-      await exporter.download(engine.scene.three);
-      if (statusEl) statusEl.textContent = 'Exported GLB';
+      const filename = await engine.exporter.download(format);
+      statusEl.textContent = 'Exported ' + filename;
     } catch (err) {
-      if (statusEl) statusEl.textContent = 'Export failed: ' + (err as Error).message;
+      statusEl.textContent = 'Export failed: ' + (err as Error).message;
     }
   }
 

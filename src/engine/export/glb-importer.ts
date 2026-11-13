@@ -25,7 +25,13 @@ export class GLBImporter {
       reader.onload = () => {
         try {
           const arrayBuffer = reader.result as ArrayBuffer;
-          this.loader.parse(arrayBuffer, '', (gltf) => {
+          const header = new Uint8Array(arrayBuffer, 0, Math.min(4, arrayBuffer.byteLength));
+          const isGlb =
+            header[0] === 0x67 && header[1] === 0x6c && header[2] === 0x54 && header[3] === 0x46;
+          const payload: ArrayBuffer | string = isGlb
+            ? arrayBuffer
+            : new TextDecoder().decode(arrayBuffer);
+          this.loader.parse(payload, '', (gltf) => {
             const root = gltf.scene;
             if (!root) {
               reject(new Error('No scene found in GLB/GLTF file.'));
@@ -51,30 +57,19 @@ export class GLBImporter {
    * @param graph The scene graph to add objects to.
    */
   private processGLTF(root: THREE.Object3D, graph: SceneGraph): void {
-    // Traverse the GLTF scene and add each object to the scene graph.
-    root.traverse((node) => {
-      if (node instanceof THREE.Mesh || node instanceof THREE.Light || node instanceof THREE.Camera) {
-        const meta = {
-          id: crypto.randomUUID(),
-          name: node.name || 'Imported Object',
-          primitive: undefined,
-          color: '#ffffff',
-          roughness: 0.6,
-          metalness: 0,
-          visible: node.visible,
-          locked: false,
-          parentId: null,
-        };
-        const sceneObject = new THREE.Object3D();
-        sceneObject.name = meta.name;
-        sceneObject.visible = meta.visible;
-        sceneObject.userData = { meta };
-        node.traverse((child) => {
-          sceneObject.add(child);
-        });
-        graph.root.add(sceneObject);
-            graph.objects.push(new SceneObject(sceneObject, meta));
-      }
-    });
+    // Keep the loaded hierarchy intact. Wrapping each mesh while traversing
+    // detaches children mid-traversal and corrupts the imported model.
+    const meta = {
+      id: crypto.randomUUID(),
+      name: root.name || 'Imported Model',
+      primitive: undefined,
+      color: '#ffffff',
+      roughness: 0.6,
+      metalness: 0,
+      visible: root.visible,
+      locked: false,
+      parentId: null,
+    };
+    graph.add(new SceneObject(root, meta));
   }
 }

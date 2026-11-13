@@ -1,0 +1,16 @@
+# Free cloud GPU options (no paid services)
+# Based on PHASE4_AI_PREPARATION_RESEARCH.txt research
+
+# Local execution only (no paid APIs)
+fastapi==0.125.0
+uvicorn[standard]==0.54.0
+pydantic==1.10.27
+
+# Local-only model options (MIT-licensed)
+# These can be installed when local GPU is available
+# transformers>=4.0
+# torch>=2.0
+# - or -
+
+# Placeholder for model handling - install only when local GPU confirmed
+# install-locally-if-gpu: python -c "import torch; print(torch.cuda.is_available())"

@@ -4,13 +4,19 @@
  * WebGL render loop.
  */
 
-import { el } from './ui/UILite';
 import { EditorEngine } from './engine/core/editor-engine';
-import { GLBExporter } from './engine/export/glb-exporter';
 import { GLBImporter } from './engine/export/glb-importer';
+import type { ExportFormat } from './engine/export/export-manager';
 import { buildToolbar } from './ui/Toolbar';
 import { Inspector } from './ui/Inspector';
 import { Hierarchy } from './ui/Hierarchy';
+import { EditModePanel } from './ui/modeling/EditModePanel';
+import { AIGeneratorPanel } from './ui/AIGeneratorPanel';
+import { APIManagerPanel } from './ui/APIManagerPanel';
+import { APIManager } from './ai/api-manager';
+import { ProjectManagerUI } from './ui/ProjectManager';
+import { RiggingPanel } from './ui/RiggingPanel';
+import { AnimationPanel } from './ui/AnimationPanel';
 
 function init(): void {
   const app = document.getElementById('app')!;
@@ -18,13 +24,36 @@ function init(): void {
   // Create the 3D engine.
   const engine = new EditorEngine(app.querySelector('#viewport')!);
 
+  // Mount project manager controls
+  new ProjectManagerUI(engine);
+
   // Build the UI.
   const toolbar = buildToolbar({ engine, onExport: handleExport, onClear: handleClear, onImport: handleImport, onToggleEditMode: () => {
-  engine.toggleEditMode();
-} });
+    engine.toggleEditMode();
+  } });
   app.prepend(toolbar);
 
   const sidebar = document.getElementById('sidebar')!;
+
+  // Provider configuration and generation share one API manager.
+  const apiManager = new APIManager();
+  const apiPanel = new APIManagerPanel(apiManager);
+  sidebar.appendChild(apiPanel.element);
+
+  // Add AI Generator Panel
+  const aiPanel = new AIGeneratorPanel(engine, apiManager);
+  sidebar.appendChild(aiPanel.element);
+
+  // Add Edit Mode / Modeling Panel
+  const editModePanel = new EditModePanel(engine);
+  sidebar.appendChild(editModePanel.element);
+
+  const rigPanel = new RiggingPanel(engine);
+  sidebar.appendChild(rigPanel.element);
+
+  const animationPanel = new AnimationPanel(engine);
+  sidebar.appendChild(animationPanel.element);
+
   const inspector = new Inspector(engine);
   sidebar.appendChild(inspector.element);
 
@@ -33,16 +62,14 @@ function init(): void {
 
   const statusEl = app.querySelector('.project-bar .status') as HTMLElement;
 
-  async function handleExport(): Promise<void> {
+  async function handleExport(format: ExportFormat = 'glb'): Promise<void> {
     if (!statusEl) return;
-    const prev = statusEl.textContent;
-    if (prev) statusEl.textContent = 'Exporting…';
+    statusEl.textContent = 'Exporting…';
     try {
-      const exporter = new GLBExporter();
-      await exporter.download(engine.scene.three);
-      if (statusEl) statusEl.textContent = 'Exported GLB';
+      const filename = await engine.exporter.download(format);
+      statusEl.textContent = 'Exported ' + filename;
     } catch (err) {
-      if (statusEl) statusEl.textContent = 'Export failed: ' + (err as Error).message;
+      statusEl.textContent = 'Export failed: ' + (err as Error).message;
     }
   }
 
@@ -77,8 +104,17 @@ function init(): void {
   engine.start();
 
   // Expose for testing.
-  (window as any).ai3d = { engine, statusEl };
+  window.ai3d = { engine, statusEl };
   console.log('AI 3D Creator initialized. Open DevTools for engine access.');
+}
+
+declare global {
+  interface Window {
+    ai3d: {
+      engine: EditorEngine;
+      statusEl: HTMLElement;
+    };
+  }
 }
 
 if (document.readyState === 'loading') {

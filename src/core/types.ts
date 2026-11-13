@@ -3,7 +3,6 @@
 ///
 
 import * as THREE from 'three';
-import { Mesh } from 'three';
 
 // --- Scene and SceneObject Types ---
 
@@ -20,17 +19,17 @@ export interface SceneObject {
     locked: boolean;
     parentId: string | null;
     userData?: THREE.Object3D['userData'];
-    [key: string]: any;
+    [key: string]: unknown;
   };
   applyMaterial?: (material: THREE.Material) => void;
   clone?: () => SceneObject;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // --- Scene Type ---
 export interface Scene {
   three: THREE.Scene;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // --- Object3D Type ---
@@ -44,8 +43,8 @@ export interface ObjectMeta {
   visible: boolean;
   locked: boolean;
   parentId: string | null;
-  userData?: any;
-  [key: string]: any;
+  userData?: unknown;
+  [key: string]: unknown;
 }
 
 // --- SceneGraph Type ---
@@ -60,5 +59,5 @@ export interface SceneGraph {
   find: (id: string) => SceneObject | null;
   duplicate: (obj: SceneObject) => SceneObject | null;
   select: (obj: SceneObject) => void;
-  [key: string]: any;
+  [key: string]: unknown;
 }

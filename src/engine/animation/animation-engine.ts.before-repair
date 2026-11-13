@@ -1,0 +1,532 @@
+/**
+ * Animation system for scene objects and skeleton rigs.
+ * Integrates with THREE.AnimationMixer, THREE.AnimationClip, THREE.KeyframeTrack.
+ */
+import * as THREE from 'three';
+import { SkeletonRig } from '../rigging/skeleton';
+import type { SceneObject, SceneGraph } from '../core';
+
+/**
+ * Animation data (flat JSON-ready format).
+ */
+export interface AnimationData {
+  name: string;
+  duration: number;
+  fps: number;
+  tracks: AnimationTrack[];
+}
+
+export interface AnimationTrack {
+  targetId: string;
+  type: 'position' | 'rotation' | 'scale';
+  times: number[];
+  values: number[][];
+}
+
+/**
+ * Procedural animation preset (keyframe generator function).
+ */
+export type AnimationPreset = (time: number) => AnimationData;
+
+/**
+ * Keyframe value for position, rotation (quaternion x,y,z,w), or scale.
+ */
+export type KeyframeValue = [number, number, number] | [number, number, number, number];
+
+/**
+ * SceneObject animation clip.
+ */
+export interface SceneObjectClip {
+  name: string;
+  duration: number;
+  targetObject: SceneObject;
+  positionTrack?: THREE.VectorKeyframeTrack;
+  rotationTrack?: THREE.QuaternionKeyframeTrack;
+  scaleTrack?: THREE.VectorKeyframeTrack;
+}
+
+/**
+ * Skeleton rig bone animation.
+ */
+export interface BoneClip {
+  rig: SkeletonRig;
+  boneName: string;
+  duration: number;
+  bone?: THREE.Bone; // Resolved after rig binding
+}
+
+/**
+ * Animation mixer with timeline control.
+ */
+export class AnimationEngine {
+  readonly clips: Map<string, SceneObjectClip | BoneClip> = new Map();
+  private readonly mixer = new THREE.AnimationMixer(null);
+  private currentTime = 0;
+  private isPlaying = false;
+  private desiredSpeed = 1;
+  private clipsToUpdate: Set<THREE.AnimationClip> = new Set();
+  readonly onChange: () => void;
+  private readonly changeQueue: Set<() => void> = new Set();
+
+  constructor(private readonly scene: THREE.Scene) {}
+
+  /**
+   * Play current animation (or first clip if no clip set).
+   */
+  play(): void {
+    if (!this.clipsToUpdate.size) return;
+    this.isPlaying = true;
+    this.mixer.timeScale = this.desiredSpeed;
+    this.scheduleNextUpdate();
+  }
+
+  /**
+   * Pause current animation.
+   */
+  pause(): void {
+    this.isPlaying = false;
+  }
+
+  /**
+   * Stop current animation and reset to time 0.
+   */
+  stop(): void {
+    this.pause();
+    this.currentTime = 0;
+    this.mixer.stopAllAction();
+    this.onChange?.();
+  }
+
+  /**
+   * Seek to specific time (0 = start, duration = end).
+   */
+  seek(time: number): void {
+    this.currentTime = Math.max(0, Math.min(time, this.getTotalDuration()));
+    this.mixer.setTime(this.currentTime);
+    this.onChange?.();
+  }
+
+  /**
+   * Set playback speed (fraction of 1.0).
+   */
+  setSpeed(factor: number): void {
+    this.desiredSpeed = Math.max(0.1, Math.min(factor, 5));
+    if (this.isPlaying) this.mixer.timeScale = this.desiredSpeed;
+  }
+
+  /**
+   * Toggle play/pause.
+   */
+  togglePlay(): boolean {
+    if (this.isPlaying) this.pause();
+    else this.play();
+    return this.isPlaying;
+  }
+
+  /**
+   * Add/remove current playback clip from mixer.
+   */
+  update(delta: number): void {
+    // Use the first clip if no current clip set
+    const clip = this.getCurrentClip();
+    if (clip) {
+      const action = this.mixer.clipAction(clip.track);
+      if (!action.isRunning()) action.play();
+      this.currentTime = this.mixer.getTime();
+
+      // Sync scene object transforms
+      this.syncSceneObject(clip);
+    }
+    this.mixer.update(delta);
+  }
+
+  /**
+   * Get current playback clip.
+   */
+  getCurrentClip(): SceneObjectClip | BoneClip | null {
+    const clipName = this.mixer._actions[0]?.getClip()?.name ?? null;
+    return clipName ? this.clips.get(clipName) ?? null : null;
+  }
+
+  /**
+   * Get total duration of all clips.
+   */
+  getTotalDuration(): number {
+    let maxDuration = 0;
+    for (const clip of this.clips.values()) {
+      maxDuration = Math.max(maxDuration, clip.duration);
+    }
+    return maxDuration;
+  }
+
+  /**
+   * Add clip and generate animation tracks.
+   */
+  addClip(name: string, object: SceneObject, times: number[], position?: number[][], rotation?: number[][], scale?: number[][]): SceneObjectClip {
+    if (times.length === 0) throw new Error('Empty keyframe times');
+
+    const duration = times[times.length - 1];
+    const trackPositions = position ? new THREE.Float32BufferAttribute(position.flatMap(v => v), 3) : undefined;
+    const trackRotations = rotation ? new THREE.Float32BufferAttribute(rotation.flatMap(v => v), 4) : undefined;
+    const trackScales = scale ? new THREE.Float32BufferAttribute(scale.flatMap(v => v), 3) : undefined;
+
+    const clipObj: SceneObjectClip = {
+      name,
+      duration,
+      targetObject: object,
+      positionTrack: trackPositions ? new THREE.VectorKeyframeTrack(`.position`, times, position as [number, number, number][]) : undefined,
+      rotationTrack: trackRotations ? new THREE.QuaternionKeyframeTrack(`.rotation`, times, rotation as [number, number, number, number][]) : undefined,
+      scaleTrack: trackScales ? new THREE.VectorKeyframeTrack(`.scale`, times, scale as [number, number, number][]) : undefined,
+    };
+
+    const track = new THREE.AnimationClip(name, duration, [
+      clipObj.positionTrack,
+      clipObj.rotationTrack,
+      clipObj.scaleTrack,
+    ].filter((t): t is THREE.TrackedAnimationTrack => t !== undefined));
+
+    this.clips.set(name, { ...clipObj, track });
+    this.onChange?.();
+    return clipObj;
+  }
+
+  /**
+   * Add bone animation clip.
+   */
+  addBoneClip(name: string, rig: SkeletonRig, boneName: string, times: number[], position?: number[][], rotation?: number[][], scale?: number[][]): BoneClip {
+    if (times.length === 0) throw new Error('Empty keyframe times');
+
+    const duration = times[times.length - 1];
+    const bone = rig.getBone(boneName);
+
+    this.clips.set(name, {
+      name,
+      duration,
+      rig,
+      boneName,
+      bone,
+    });
+    this.onChange?.();
+
+    return this.clips.get(name)! as BoneClip;
+  }
+
+  /**
+   * Remove clip by name.
+   */
+  removeClip(name: string): boolean {
+    if (!this.clips.has(name)) return false;
+    this.clips.delete(name);
+    this.stop();
+    this.onChange?.();
+    return true;
+  }
+
+  /**
+   * Stop and clear all clips.
+   */
+  clear(): void {
+    this.stop();
+    this.clips.clear();
+    this.onChange?.();
+  }
+
+  /**
+   * Get all clip names.
+   */
+  getClipNames(): string[] {
+    return Array.from(this.clips.keys());
+  }
+
+  /**
+   * Serialize all clips.
+   */
+  serialize(): AnimationData[] {
+    const result: AnimationData[] = [];
+    for (const [name, clip] of this.clips) {
+      const animatedData: AnimationTrack[] = [];
+
+      if (this.isSceneObjectClip(clip)) {
+        const obj = clip.targetObject.three;
+        if (obj.position || obj.rotation || obj.scale) {
+          const track: AnimationTrack = {
+            targetId: clip.targetObject.meta.id,
+            type: 'position',
+            times: [],
+            values: [],
+          };
+          animatedData.push(track);
+        }
+      }
+
+      // Build flat animation data
+      result.push({
+        name,
+        duration: clip.duration,
+        fps: 30,
+        tracks: animatedData,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Load clips from serialized data.
+   */
+  load(data: AnimationData[], graph: SceneGraph): boolean {
+    let success = true;
+    this.clear();
+
+    for (const anim of data) {
+      const tracks = anim.tracks;
+      if (tracks.length === 0) continue;
+
+      const firstTrack = tracks[0];
+      const obj = graph.find(firstTrack.targetId);
+      if (!obj || !this.isSceneObjectClip(obj)) {
+        success = false;
+        continue;
+      }
+
+      // Normalize track data
+      const times = firstTrack.times.length > 0 ? [...firstTrack.times] : [0];
+
+      const positionData: number[][] = [];
+      const rotationData: number[][] = [];
+      const scaleData: number[][] = [];
+
+      for (const track of tracks) {
+        switch (track.type) {
+          case 'position':
+            for (let i = 0; i < track.times.length; i++) {
+              positionData.push([track.times[i], ...track.values[i]]);
+            }
+            break;
+          case 'rotation':
+            for (let i = 0; i < track.times.length; i++) {
+              rotationData.push([track.times[i], ...track.values[i]]);
+            }
+            break;
+          case 'scale':
+            for (let i = 0; i < track.times.length; i++) {
+              scaleData.push([track.times[i], ...track.values[i]]);
+            }
+            break;
+        }
+      }
+
+      this.addClip(anim.name, obj, times, positionData, rotationData, scaleData);
+    }
+
+    return success;
+  }
+
+  /**
+   * Get procedural presets for humanoid rig.
+   */
+  static getUseroidPresets(): Record<string, AnimationPreset> {
+    return {
+      idle: (time: number): AnimationData => {
+        const duration = 2;
+        const t = (time % duration) / duration;
+
+        // Subtle breathing and floating
+        const y = Math.sin(t * Math.PI * 2) * 0.02;
+        const x = Math.sin(t * Math.PI * 2 * 0.5) * 0.01;
+
+        return {
+          name: 'Idle',
+          duration,
+          fps: 30,
+          tracks: [
+            {
+              targetId: 'hips',
+              type: 'position',
+              times: [0, duration],
+              values: [[0, 0, 0], [x, y, 0]],
+            },
+          ],
+        };
+      },
+
+      walk: (time: number): AnimationData => {
+        const duration = 2;
+        const t = (time % duration) / duration;
+        const cycleTime = t * Math.PI * 2;
+
+        const leftLeg = Math.sin(cycleTime);
+        const rightLeg = Math.sin(cycleTime + Math.PI);
+        const leftArm = Math.sin(cycleTime + Math.PI);
+        const rightArm = Math.sin(cycleTime);
+
+        return {
+          name: 'Walk',
+          duration,
+          fps: 30,
+          tracks: [
+            {
+              targetId: 'leftUpperLeg',
+              type: 'position',
+              times: [0, 0.5, 1, 1.5, duration],
+              values: [
+                [0, 0, 0],
+                [0, rightLeg * 0.15, 0],
+                [0, 0, 0],
+                [0, leftLeg * 0.15, 0],
+                [0, 0, 0],
+              ],
+            },
+            {
+              targetId: 'rightUpperLeg',
+              type: 'position',
+              times: [0, 0.5, 1, 1.5, duration],
+              values: [
+                [0, 0, 0],
+                [0, leftLeg * 0.15, 0],
+                [0, 0, 0],
+                [0, rightLeg * 0.15, 0],
+                [0, 0, 0],
+              ],
+            },
+            {
+              targetId: 'leftUpperArm',
+              type: 'position',
+              times: [0, 0.5, 1, 1.5, duration],
+              values: [
+                [0, 0, 0],
+                [0, leftArm * 0.12, 0],
+                [0, 0, 0],
+                [0, rightArm * 0.12, 0],
+                [0, 0, 0],
+              ],
+            },
+            {
+              targetId: 'rightUpperArm',
+              type: 'position',
+              times: [0, 0.5, 1, 1.5, duration],
+              values: [
+                [0, 0, 0],
+                [0, rightArm * 0.12, 0],
+                [0, 0, 0],
+                [0, leftArm * 0.12, 0],
+                [0, 0, 0],
+              ],
+            },
+          ],
+        };
+      },
+
+      wave: (time: number): AnimationData => {
+        const duration = 3;
+        const t = (time % duration) / duration;
+
+        // Ascending wave motion
+        const amplitude = t < 1 ? t : 2 - t;
+        const offset = t >= 1 && t < 2 ? time % 1 : 0;
+
+        return {
+          name: 'Wave',
+          duration,
+          fps: 30,
+          tracks: [
+            {
+              targetId: 'rightHand',
+              type: 'position',
+              times: [0, 0.5, 1, 1.5, 2, duration],
+              values: [
+                [0.4, 0.3, 0],
+                [0.4 + amplitude * 0.3, 0.3 + amplitude * 0.2, amplitude * 0.1],
+                [0.4, 0.3, 0],
+                [0.4 + amplitude * 0.35, 0.3 + amplitude * 0.2, amplitude * 0.12],
+                [0.4, 0.3, 0],
+                [0.4 + offset * 0.05, 0.3 + offset * 0.02, offset * 0.01],
+              ],
+            },
+            {
+              targetId: 'rightUpperArm',
+              type: 'rotation',
+              times: [0, 0.5, 1, 1.5, 2, duration],
+              values: [
+                [0, 0, 0],
+                [0, offset * 0.5, amplitude * 0.3],
+                [0, 0, 0],
+                [0, offset * 0.6, amplitude * 0.35],
+                [0, 0, 0],
+                [0, offset * 0.05, 0],
+              ],
+            },
+          ],
+        };
+      },
+    };
+  }
+
+  /**
+   * Apply procedural preset to object.
+   */
+  applyPreset(name: string, object: SceneObject, fps: number = 30): SceneObjectClip | null {
+    const presets = AnimationEngine.getUseroidPresets();
+    const preset = presets[name];
+    if (!preset) return null;
+
+    const data = preset(0);
+    const duration = data.duration;
+    const freq = fps;
+
+    const times: number[] = [];
+    for (let i = 0; i <= cntops(freq * duration); i++) {
+      times.push(i / freq);
+    }
+
+    const posData: number[][] = [];
+    const rotData: number[][] = [];
+    const scaleData: number[][] = [];
+
+    for (const track of data.tracks) {
+      for (let i = 0; i < track.values.length; i++) {
+        const t = i / (track.values.length - 1);
+        times.push(t);
+        posData.push([t, ...track.values[i]]);
+      }
+    }
+
+    // Create minimal normalized clip without interpolation
+    const clip = this.addClip(name, object, times, posData, rotData, scaleData);
+
+    // Sync once
+    this.syncSceneObject(clip);
+
+    return clip;
+  }
+
+  private syncSceneObject(clip: SceneObjectClip): void {
+    const obj = clip.targetObject.three;
+    obj.position.set(...(clip.positionTrack?.getX(0) ?? [0, 0, 0]));
+    obj.rotation.set(
+      clip.rotationTrack?.getX(0) ?? 0,
+      clip.rotationTrack?.getY(0) ?? 0,
+      clip.rotationTrack?.getZ(0) ?? 0
+    );
+    obj.scale.set(...(clip.scaleTrack?.getX(0) ?? [1, 1, 1]));
+  }
+
+  private isSceneObjectClip(clip: any): clip is SceneObjectClip {
+    return clip && 'targetObject' in clip;
+  }
+
+  private scheduleNextUpdate(): void {
+    if (!this.isPlaying) return;
+    const delay = 16; // ~60fps
+    setTimeout(() => {
+      if (this.isPlaying) {
+        this.update(delay / 1000);
+        this.scheduleNextUpdate();
+      }
+    }, delay);
+  }
+}
+
+// Normalized tick count
+function cntops(n: number): number {
+  return Math.max(1, Math.floor(n));
+}

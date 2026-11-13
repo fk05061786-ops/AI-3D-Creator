@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { SceneGraph } from '../core/scene-graph';
 
 /**
  * GLB/GLTF export. Wraps the async exporter in a Promise so callers can
