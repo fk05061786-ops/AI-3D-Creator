@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "ai-3d-creator": {
+      "command": "node",
+      "args": ["--experimental-strip-types", "scripts/mcp-server.ts"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "AI3D_MCP_PORT": "3333",
+        "AI3D_MCP_HOST": "127.0.0.1"
+      },
+      "serverUrl": "http://127.0.0.1:3333",
+      "url": "http://127.0.0.1:3333",
+      "transport": "stdio",
+      "description": "AI-3D-Creator MCP server: scene inspection, primitives, transforms, humanoid rigging, keyframe animation and GLB/GLTF/OBJ/STL export.",
+      "tools": [
+        "list_scene_objects",
+        "add_primitive",
+        "transform_object",
+        "bind_humanoid_rig",
+        "add_animation_keyframe",
+        "play_stop_animation",
+        "export_scene_glb_obj_stl"
+      ]
+    }
+  }
+}

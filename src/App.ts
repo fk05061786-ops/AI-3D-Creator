@@ -37,7 +37,7 @@ function init(): void {
 
   // Provider configuration and generation share one API manager.
   const apiManager = new APIManager();
-  const apiPanel = new APIManagerPanel(apiManager);
+  const apiPanel = new APIManagerPanel(apiManager, engine);
   sidebar.appendChild(apiPanel.element);
 
   // Add AI Generator Panel

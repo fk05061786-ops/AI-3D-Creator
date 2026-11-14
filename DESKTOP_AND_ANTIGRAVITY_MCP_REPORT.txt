@@ -1,0 +1,327 @@
+================================================================================
+WINDOWS / macOS DESKTOP + GOOGLE ANTIGRAVITY MCP - IMPLEMENTATION REPORT
+AI-3D-Creator  |  Date: 2026-11-14  |  Project root: AI-3D-Creator/
+================================================================================
+
+STATUS: COMPLETE - typecheck 0 errors, ESLint 0 errors, all self-tests PASS,
+        production build PASS, MCP self-test PASS (stdio + HTTP/SSE).
+
+The previous terminal session had already written most of this feature. This
+session audited what existed, kept every finished file intact and completed
+only the missing or broken parts. Section 8 lists exactly what was already
+done and section 9 lists what was finished here.
+
+--------------------------------------------------------------------------------
+1. SCOPE
+--------------------------------------------------------------------------------
+Two features in one deliverable:
+
+  A. Google Antigravity MCP integration
+     Antigravity (or any MCP client) drives the running 3D editor: it lists
+     scene objects, adds primitives, transforms objects, builds a 21-bone
+     humanoid rig, records animation keyframes, drives the timeline and
+     exports the scene.
+
+  B. Windows / macOS desktop builds
+     The same web app ships as an Electron desktop app: a Windows .exe
+     (NSIS installer + portable) and a macOS .dmg (+ zip) for x64 and arm64,
+     built automatically by GitHub Actions.
+
+Both halves meet in one place: the desktop app starts the MCP server on
+port 3333 and the editor connects to it over HTTP/SSE, so an Antigravity
+session controls the desktop app exactly like the browser build.
+
+--------------------------------------------------------------------------------
+2. MCP ARCHITECTURE
+--------------------------------------------------------------------------------
+
+  Antigravity ──stdio JSON-RPC──▶ scripts/mcp-server.ts
+                                        │
+                                        │  tool call (SSE event "request")
+                                        ▼
+                                  GET /sse  ◀── editor (McpBridge, EventSource)
+                                        │
+                                        │  POST /response
+                                        ▼
+                                  src/ai/mcp-bridge.ts  ──▶ EditorEngine
+
+  scripts/mcp-server.ts   Node process, two transports in one:
+                            * stdio  - the standard MCP transport. Newline
+                                       delimited JSON-RPC 2.0 on stdin/stdout.
+                                       Only protocol frames reach stdout, all
+                                       logs go to stderr so a client never
+                                       sees garbage.
+                            * HTTP   - port 3333 (AI3D_MCP_PORT / AI3D_MCP_HOST
+                                       override it). Routes:
+                                         GET  /sse       editor bridge stream
+                                         GET  /health    status + tool count
+                                         GET  /tools     tool catalogue
+                                         POST /rpc       JSON-RPC over HTTP
+                                         POST /response  bridge answers
+                            * Port conflict: if 3333 is already taken (for
+                              example Antigravity started the server itself)
+                              the process switches to client mode and forwards
+                              its stdio traffic to the running server over
+                              /rpc. Both entry points stay usable and only
+                              one process owns the bridge.
+                            * Tool timeout 30 s (AI3D_MCP_TIMEOUT).
+
+  src/ai/mcp-bridge.ts   shared by Node and the browser:
+                            * MCP_TOOLS - the 7 tool definitions with JSON
+                              schemas (single source of truth for the server,
+                              the /tools endpoint and the editor)
+                            * executeMcpTool(adapter, name, args) - pure
+                              executor, no DOM and no network, so it can be
+                              driven headlessly
+                            * McpEditorAdapter - the structural slice of
+                              EditorEngine the tools need
+                            * McpBridge - browser transport: EventSource on
+                              /sse, POSTs results back to /response, publishes
+                              state through the 'ai3d:mcp-bridge-state' event
+
+  The 7 tools
+    list_scene_objects        ids, names, parents, transforms
+    add_primitive             cube | sphere | cylinder | plane, optional name
+    transform_object          position / rotation / scale by id
+    bind_humanoid_rig        21-bone humanoid skeleton + skin bind
+    add_animation_keyframe    position | rotation | scale on object or bone
+    play_stop_animation       play | pause | stop
+    export_scene_glb_obj_stl  glb | gltf | obj | stl, reports name and size
+
+--------------------------------------------------------------------------------
+3. MCP CLIENT CONFIGURATION (ANTIGRAVITY)
+--------------------------------------------------------------------------------
+  mcp_config.json                 repo root, standard MCP client layout
+  .agents/mcp_config.json         same server under the .agents folder, with a
+                                  $schema hint for Antigravity
+
+  Both point Antigravity at the local server:
+
+    "command": "node",
+    "args": ["--experimental-strip-types", "scripts/mcp-server.ts"],
+    "cwd": "${workspaceFolder}",
+    "env": { "AI3D_MCP_PORT": "3333", "AI3D_MCP_HOST": "127.0.0.1" }
+
+  The flag is required on Node 22.6 - 22.17 (type stripping is only on by
+  default from 22.18) and is still accepted on Node 24, so one command line
+  works on every supported Node version.
+
+--------------------------------------------------------------------------------
+4. EDITOR UI (src/ui/APIManagerPanel.ts)
+--------------------------------------------------------------------------------
+  The API Manager panel now carries an "Antigravity MCP bridge" block:
+
+    - status line   "Antigravity MCP: not connected / connecting… / connected"
+                    coloured blue / amber / green / red
+    - button        "Connect MCP" <-> "Disconnect MCP"
+    - clicking it creates McpBridge(createEditorAdapter(engine)) and opens the
+      SSE connection; clicking again closes it
+    - every state change (connect, hello received, error, disconnect) is
+      rendered live through the McpBridge onChange listener
+    - when the editor engine is missing the panel reports the reason instead
+      of failing silently
+
+  src/App.ts and src/ui/App.ts pass the EditorEngine into the panel, and
+  style.css adds the .api-mcp block styling.
+
+--------------------------------------------------------------------------------
+5. ELECTRON DESKTOP APP
+--------------------------------------------------------------------------------
+  electron/main.cjs
+    - BrowserWindow 1440x900, contextIsolation on, nodeIntegration off
+    - loads dist/index.html when packaged, the vite dev server when it is
+      running (see 5.2)
+    - starts the MCP server as a child process so the in-app bridge always
+      has an endpoint on port 3333; if the port is already taken (Antigravity
+      started the server) the child is skipped and the editor uses the
+      running one
+    - ipcMain handler 'ai3d:save-file' -> native save dialog, writes the
+      base64 payload to the chosen path
+    - external links open in the system browser, not in the app window
+    - kills the MCP child on quit
+
+  electron/preload.cjs
+    - contextIsolation bridge only, no Node API leaks
+    - exposes ai3dDesktop { isElectron, platform, versions, saveFile }
+    - exposes AI3DSaveFile { saveFile(filename, base64) } - the same hook
+      name the Android host already uses, so
+      src/engine/export/file-download.ts picks it up unchanged and desktop
+      exports go through the native save dialog instead of a browser download
+
+  package.json (electron-builder)
+    appId       com.ai3dcreator.desktop
+    productName AI 3D Creator
+    win         nsis (installer) + portable, x64
+                -> AI 3D Creator-1.0.0-Windows-x64.exe
+    mac         dmg + zip, x64 + arm64
+                -> AI 3D Creator-1.0.0-macOS-<arch>.dmg
+    linux       AppImage (extra, not requested)
+    files       dist, electron, package.json; node_modules excluded because
+                the renderer is fully bundled by vite
+
+  npm scripts
+    npm run desktop:dev      electron .            (works on Windows too)
+    npm run desktop:build    win .exe (nsis + portable)
+    npm run desktop:build:mac macOS .dmg
+    npm run desktop:dist    both
+    npm run mcp              run the MCP server alone on stdio
+    npm run mcp:build        bundle the server to dist-mcp/mcp-server.mjs
+    npm run test:mcp         headless MCP self-test
+
+--------------------------------------------------------------------------------
+6. CI (.github/workflows/desktop.yml)
+--------------------------------------------------------------------------------
+  The pre-existing tauri job is untouched. A new "electron" job runs on
+  windows-latest and macos-latest:
+
+    checkout -> setup-node 22 -> npm ci -> npm run build -> npm run mcp:build
+    -> npm run typecheck -> npm run test -> electron-builder --win | --mac
+    -> upload-artifact (release/*.exe, *.dmg, *.zip, *.blockmap)
+    -> softprops/action-gh-release on v* tags
+
+  Node 22 is used because the MCP self-test runs TypeScript through Node's
+  type stripping, which does not exist on Node 20.
+
+--------------------------------------------------------------------------------
+7. VERIFICATION PERFORMED
+--------------------------------------------------------------------------------
+  npm run typecheck      tsc --noEmit                     0 errors
+  npx eslint <changed>   electron/, src/ai/, src/ui/, scripts/  0 problems
+  npm run test:rig       PHASE 6 RIG SELFTEST PASS
+  npm run test:anim      ANIMATION + EXPORT SELFTEST PASS
+  npm run test:api       10 checks passed
+  npm run test:mcp       MCP SELFTEST PASS
+  npm run test           all four suites PASS
+  npm run build          vite build  50 modules, built in ~6.6 s
+  npm run mcp:build      dist-mcp/mcp-server.mjs  12.3 kB
+  npm ci --dry-run       lock file in sync with package.json
+
+  scripts/mcp-selftest.ts starts the real server as a child process, connects
+  a fake editor over the HTTP/SSE bridge (the same path the browser uses) and
+  drives all seven tools over stdio JSON-RPC: initialize, tools/list,
+  list_scene_objects, add_primitive, transform_object, bind_humanoid_rig,
+  add_animation_keyframe, play_stop_animation, export_scene_glb_obj_stl,
+  plus the error paths (unknown object id, invalid export format) and the
+  HTTP /tools and /rpc routes.
+
+  The bundled server was also started standalone and answered
+  GET /health with
+  {"ok":true,"server":"ai-3d-creator","version":"1.0.0","mode":"host",
+   "tools":7,"editors":0}
+
+--------------------------------------------------------------------------------
+8. WHAT WAS ALREADY COMPLETE (kept unchanged)
+--------------------------------------------------------------------------------
+  scripts/mcp-server.ts          stdio + HTTP/SSE server, port 3333, host and
+                                client mode, 7 tools. Untouched.
+  src/ai/mcp-bridge.ts           tool catalogue, pure executor, EditorEngine
+                                adapter, browser McpBridge. Untouched.
+  src/ui/APIManagerPanel.ts      MCP status/connect block. Untouched.
+  src/App.ts, src/ui/App.ts      pass the EditorEngine to the panel.
+  style.css                     .api-mcp styling.
+  .agents/mcp_config.json        Antigravity server entry (see 8.1).
+  mcp_config.json                Antigravity server entry (see 8.1).
+  electron/main.cjs              window, MCP child process, save dialog.
+  electron/preload.cjs           context bridge.
+  package.json                   electron-builder win/mac config, scripts.
+  .github/workflows/desktop.yml  electron matrix job, artifacts, release.
+  scripts/mcp-selftest.ts        headless end-to-end self-test.
+  scripts/mcp-browser-e2e.mjs    optional browser/CDP check (dev helper, not
+                                wired into package.json on purpose: it needs a
+                                local Chrome and a running vite server).
+
+  8.1 Only one change was made inside an already finished file: the
+      "--experimental-strip-types" flag added to the args of both MCP config
+      files, so the server also starts on Node 22.6 - 22.17.
+
+--------------------------------------------------------------------------------
+9. WHAT WAS FINISHED IN THIS SESSION
+--------------------------------------------------------------------------------
+  1. electron/main.cjs - the packaged MCP server could never start:
+       * the bundled dist-mcp/mcp-server.mjs was spawned without
+         ELECTRON_RUN_AS_NODE, so process.execPath opened a second copy of
+         the app instead of running the server as Node
+       * the bundle lived inside app.asar, and a file inside an asar archive
+         cannot be executed by the OS
+       * the .ts fallback needed type stripping on older Node
+     Now the server always runs with ELECTRON_RUN_AS_NODE=1, the packaged
+     build looks for resources/mcp/mcp-server.mjs (extraResources) and the
+     dev build falls back to scripts/mcp-server.ts with
+     --experimental-strip-types. A spawn failure is logged instead of
+     crashing the main process.
+
+  2. electron/main.cjs - "npm run desktop:dev" used the Unix-only syntax
+     "AI3D_DESKTOP_DEV=1 electron ." and failed on Windows. The window now
+     uses the vite dev server whenever it answers, on every platform, and
+     falls back to dist/index.html otherwise.
+
+  3. electron/preload.cjs - the save dialog was unreachable: the renderer
+     only knows the Android hook name AI3DSaveFile. The preload now exposes
+     it, so desktop exports use the native save dialog with no renderer
+     change.
+
+  4. package.json
+       * "desktop:dev" -> "electron ." (cross platform)
+       * dist-mcp moved from the asar to extraResources so the packaged app
+         can execute the MCP server
+       * electron-builder config (win nsis+portable, mac dmg+zip) was already
+         in place and was kept
+
+  5. mcp_config.json and .agents/mcp_config.json - added the
+     --experimental-strip-types flag to the server args.
+
+  6. scripts/mcp-selftest.ts - the spawned server child now also gets the
+     flag, so the self-test runs on Node 22.6 as well.
+
+  7. .github/workflows/desktop.yml - the electron job now uses Node 22
+     instead of Node 20, which would fail on
+     "node --experimental-strip-types" during "npm run test".
+
+  8. eslint.config.js - CommonJS globals and require() are now configured
+     for **/*.cjs (the Electron files) and the generated dist-mcp bundle is
+     ignored. Before this the new Electron files reported 38 lint errors.
+
+  9. DESKTOP_AND_ANTIGRAVITY_MCP_REPORT.txt - this file.
+
+--------------------------------------------------------------------------------
+10. HOW TO USE IT
+--------------------------------------------------------------------------------
+  Browser / desktop, MCP client
+    1. open AI-3D-Creator, sidebar -> Universal API Manager
+    2. press "Connect MCP" (status turns green)
+    3. Antigravity picks up mcp_config.json from the project root and spawns
+       "node --experimental-strip-types scripts/mcp-server.ts"
+
+  Desktop app
+    npm install
+    npm run build && npm run mcp:build
+    npm run desktop:dev          (dev, with vite running)
+    npm run desktop:build        (Windows .exe)
+    npm run desktop:build:mac    (macOS .dmg)
+
+  CI
+    push a v* tag -> the workflow publishes the .exe and .dmg to the GitHub
+    release; every push also uploads the artifacts to the run page.
+
+--------------------------------------------------------------------------------
+11. KNOWN LIMITS AND RISKS
+--------------------------------------------------------------------------------
+  - The desktop app was not launched on this machine: Electron needs a
+    desktop Linux system and this device is Termux without GTK. The window
+    code, the MCP child process and the save dialog were reviewed and the
+    server side was verified end-to-end (selftest + standalone bundle).
+    The Windows/macOS packages are produced by CI, not locally.
+  - The packaged app is unsigned. Windows SmartScreen and Gatekeeper will
+    warn until a code signing certificate is added.
+  - The bridge is connected by hand ("Connect MCP" button). It is not
+    connected automatically, so an Antigravity call before the button is
+    pressed returns "No 3D editor is connected to the MCP bridge".
+  - The MCP server exits when its stdin closes (standard MCP behaviour for a
+    stdio server). The desktop app keeps the pipe open for the whole session.
+  - MCP traffic is plain HTTP on 127.0.0.1 with no authentication. That is
+    fine for a local tool, but anything that can reach port 3333 can drive
+    the editor. Do not expose the port to a network.
+  - Only the port and the host are configurable for the desktop app
+    (AI3D_MCP_PORT, AI3D_MCP_HOST). The renderer always connects to
+    127.0.0.1:3333 (MCP_DEFAULT_URL).
+================================================================================

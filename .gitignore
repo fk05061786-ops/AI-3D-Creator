@@ -10,3 +10,5 @@ coverage/
 .vscode/
 .idea/
 .opencode/cache/
+release/
+dist-mcp/

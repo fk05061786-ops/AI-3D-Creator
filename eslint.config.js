@@ -7,6 +7,7 @@ export default tseslint.config(
     ignores: [
       "node_modules/**",
       "dist/**",
+      "dist-mcp/**",
       "build/**",
       "coverage/**",
       "android/**",
@@ -38,7 +39,33 @@ export default tseslint.config(
         WebSocket: "readonly",
         URL: "readonly",
         process: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
       },
+    },
+  },
+  {
+    files: ["**/*.cjs"],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: {
+        require: "readonly",
+        module: "writable",
+        process: "readonly",
+        console: "readonly",
+        Buffer: "readonly",
+        fetch: "readonly",
+        AbortSignal: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly",
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
   prettier

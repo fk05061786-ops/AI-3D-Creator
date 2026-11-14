@@ -3,6 +3,8 @@ import { APIManager, API_PROVIDERS_CHANGED } from '../ai/api-manager';
 import type { ProviderConfig, ProviderKind } from '../ai/types';
 import { PROVIDER_KINDS } from '../ai/types';
 import { loadSecret } from '../ai/key-store';
+import { McpBridge, createEditorAdapter, type McpBridgeState } from '../ai/mcp-bridge';
+import type { EditorEngine } from '../engine/core/editor-engine';
 
 /**
  * Mobile-first provider configuration. The compact panel lives in the sidebar;
@@ -30,8 +32,14 @@ export class APIManagerPanel {
   } = {};
   private formBody: HTMLElement | null = null;
   private dialogStatus: HTMLElement | null = null;
+  private readonly mcpStatus: HTMLElement;
+  private readonly mcpButton: HTMLButtonElement;
+  private bridge: McpBridge | null = null;
 
-  constructor(private readonly manager: APIManager) {
+  constructor(
+    private readonly manager: APIManager,
+    private readonly engine?: EditorEngine
+  ) {
     this.element = el('div', { className: 'panel api-panel' });
     this.element.append(el('h3', {}, 'Universal API Manager'));
 
@@ -50,8 +58,60 @@ export class APIManagerPanel {
     this.statusEl = el('div', { className: 'api-status' }, 'Choose a provider, then test it.');
     this.element.append(this.providerSelect, row, this.statusEl);
 
+    this.mcpStatus = el('div', { className: 'api-status' }, 'Antigravity MCP: not connected.');
+    this.mcpButton = el(
+      'button',
+      { className: 'ghost api-mcp-button', on: { click: () => this.toggleMcp() } },
+      'Connect MCP'
+    );
+    this.element.appendChild(
+      el(
+        'div',
+        { className: 'api-mcp' },
+        el('span', { className: 'api-label' }, 'Antigravity MCP bridge'),
+        this.mcpStatus,
+        this.mcpButton
+      )
+    );
+
     if (this.manager.list().length > 0) this.renderSelect();
     window.addEventListener(API_PROVIDERS_CHANGED, this.onProvidersChanged as EventListener);
+  }
+
+  /** Connect or disconnect the local Antigravity MCP bridge. */
+  private toggleMcp(): void {
+    if (!this.engine) {
+      this.renderMcpState({
+        status: 'error',
+        url: '',
+        message: 'The editor engine is not available, the MCP bridge cannot start.',
+      });
+      return;
+    }
+    if (!this.bridge) {
+      this.bridge = new McpBridge(createEditorAdapter(this.engine));
+      this.bridge.onChange((state) => this.renderMcpState(state));
+    }
+    if (this.bridge.connected || this.bridge.status === 'connecting') {
+      this.bridge.disconnect();
+      return;
+    }
+    this.bridge.connect();
+  }
+
+  private renderMcpState(state: McpBridgeState): void {
+    const label =
+      state.status === 'connected'
+        ? 'Antigravity MCP: connected.'
+        : state.status === 'connecting'
+          ? 'Antigravity MCP: connecting…'
+          : state.status === 'error'
+            ? `Antigravity MCP: ${state.message}`
+            : 'Antigravity MCP: not connected.';
+    text(this.mcpStatus, label);
+    this.mcpStatus.style.color =
+      state.status === 'connected' ? '#34d399' : state.status === 'error' ? '#f87171' : '#60a5fa';
+    this.mcpButton.textContent = state.status === 'connected' ? 'Disconnect MCP' : 'Connect MCP';
   }
 
   private readonly onProvidersChanged = (): void => {

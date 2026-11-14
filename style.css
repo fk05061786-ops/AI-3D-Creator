@@ -317,6 +317,19 @@ footer {
 }
 .ai-provider-row { margin-bottom: 8px; }
 .ai-provider-row .api-select { margin-bottom: 0; }
+.api-mcp {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #1e293b;
+}
+.api-mcp .api-label {
+  display: block;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+.api-mcp .api-status { margin-bottom: 6px; }
+.api-mcp-button { width: 100%; }
 .ai-generate-row { display: flex; gap: 6px; margin-bottom: 8px; }
 .ai-generate-row .ai-generate-btn { flex: 1; margin-bottom: 0; }
 .ai-cancel-btn {
