@@ -23,14 +23,13 @@
     "desktop:dist": "npm run build && npm run mcp:build && electron-builder --win --x64 --mac"
   },
   "keywords": [],
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
     "@capacitor/android": "^8.6.0",
     "@capacitor/cli": "^8.6.0",
     "@capacitor/core": "^8.6.0",
     "@types/three": "^0.187.0",
-    "three": "^0.187.0"
-  },
-  "devDependencies": {
+    "three": "^0.187.0",
     "@eslint/js": "^10.0.1",
     "electron": "^45.3.2",
     "electron-builder": "^26.18.0",
@@ -53,8 +52,7 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "package.json",
-      "!node_modules/**"
+      "package.json"
     ],
     "extraResources": [
       {
@@ -67,13 +65,18 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
-          "target": "portable",
-          "arch": ["x64"]
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
         }
       ],
+      "signAndEditExecutable": false,
       "artifactName": "${productName}-${version}-Windows-${arch}.${ext}"
     },
     "nsis": {
@@ -85,23 +88,22 @@
     },
     "mac": {
       "target": [
-        {
-          "target": "dmg",
-          "arch": ["x64", "arm64"]
-        },
-        {
-          "target": "zip",
-          "arch": ["x64", "arm64"]
-        }
+        "dmg",
+        "zip"
       ],
-      "category": "public.app-category.graphics-design",
-      "hardenedRuntime": true,
+      "identity": null,
+      "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "artifactName": "${productName}-${version}-macOS-${arch}.${ext}"
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Graphics"
     }
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-android-arm64": "^4.68.3"
   }
 }
