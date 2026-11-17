@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('ai3dDesktop', {
   },
   /** Save a base64 payload through the native save dialog. */
   saveFile: (name, base64) => ipcRenderer.invoke('ai3d:save-file', { name, base64 }),
+  openImage: () => ipcRenderer.invoke('ai3d:open-image'),
 });
 
 // Same hook name as the Android host, so src/engine/export/file-download.ts

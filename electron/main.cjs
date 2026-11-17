@@ -121,6 +121,21 @@ async function createWindow() {
   });
 }
 
+
+ipcMain.handle("ai3d:open-image", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Select Source Image for 3D Generation",
+    properties: ["openFile"],
+    filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
+  });
+  if (result.canceled || !result.filePaths || !result.filePaths[0]) return null;
+  const filePath = result.filePaths[0];
+  const ext = path.extname(filePath).toLowerCase();
+  const mime = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg";
+  const base64 = fs.readFileSync(filePath).toString("base64");
+  return { name: path.basename(filePath), mime, base64 };
+});
+
 ipcMain.handle('ai3d:save-file', async (event, payload) => {
   const { name, base64 } = payload || {};
   if (!name || !base64) return { ok: false, error: 'Missing file name or payload.' };

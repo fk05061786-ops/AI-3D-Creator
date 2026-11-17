@@ -1,11 +1,15 @@
+import * as THREE from 'three';
 import { el, setDisabled, text } from './UILite';
 import { EditorEngine } from '../engine/core/editor-engine';
 import { GLBImporter } from '../engine/export/glb-importer';
+import { SceneObject } from '../engine/core/object-model';
 import { APIManager, API_PROVIDERS_CHANGED } from '../ai/api-manager';
-import type { GenerationOutput, Pipeline } from '../ai/types';
+import type { GenerationOutput, ImageInput, Pipeline } from '../ai/types';
 import { describeError } from '../ai/util';
+import { buildProceduralMesh } from '../ai/procedural-mesh';
+import { IMAGE_ACCEPT, pickImageFile } from '../bridge/image-picker';
 
-type GeneratorMode = 'text' | 'image';
+export type GeneratorMode = 'text' | 'image';
 
 interface ImagePayload {
   dataUrl: string;
@@ -18,26 +22,33 @@ interface ImagePayload {
 /**
  * Generation panel. Providers, keys and connection tests live in the API
  * Manager; this panel only selects a provider, collects input, reports progress
- * and imports the returned GLB/glTF.
+ * and imports the returned GLB/glTF. When a provider cannot serve the request
+ * (a cold or rate limited free endpoint) a procedural mesh is added instead,
+ * so the viewport always receives real geometry.
  */
 export class AIGeneratorPanel {
   readonly element: HTMLElement;
-  private readonly promptInput: HTMLInputElement;
-  private readonly promptGroup: HTMLElement;
-  private readonly imageBox: HTMLElement;
+  private readonly promptInput: HTMLTextAreaElement;
+  private readonly textGroup: HTMLElement;
+  private readonly imageGroup: HTMLElement;
   private readonly imageInput: HTMLInputElement;
   private readonly imagePreview: HTMLImageElement;
   private readonly imageInfo: HTMLElement;
-  private readonly generateBtn: HTMLButtonElement;
+  private readonly dropZone: HTMLElement;
+  private readonly generateTextBtn: HTMLButtonElement;
+  private readonly generateImageBtn: HTMLButtonElement;
   private readonly cancelBtn: HTMLButtonElement;
   private readonly providerSelect: HTMLSelectElement;
   private readonly statusEl: HTMLElement;
   private readonly resultEl: HTMLElement;
+  private readonly spinner: HTMLElement;
   private readonly modeButtons: Record<GeneratorMode, HTMLButtonElement>;
   private readonly importer = new GLBImporter();
-  private mode: GeneratorMode = 'text';
   private imagePayload: ImagePayload | null = null;
   private abort: AbortController | null = null;
+  private overlay: HTMLElement | null = null;
+  private homeParent: Node | null = null;
+  private homeNextSibling: Node | null = null;
 
   constructor(private readonly engine: EditorEngine, private readonly manager: APIManager) {
     this.element = el('div', { className: 'panel ai-panel' });
@@ -45,8 +56,8 @@ export class AIGeneratorPanel {
 
     const modeRow = el('div', { className: 'actions ai-mode' });
     this.modeButtons = {
-      text: el('button', { className: 'active', on: { click: () => this.setMode('text') } }, 'Text') as HTMLButtonElement,
-      image: el('button', { on: { click: () => this.setMode('image') } }, 'Image') as HTMLButtonElement,
+      text: el('button', { className: 'active', on: { click: () => this.setMode('text') } }, 'Text to 3D') as HTMLButtonElement,
+      image: el('button', { on: { click: () => this.setMode('image') } }, 'Image to 3D') as HTMLButtonElement,
     };
     modeRow.append(this.modeButtons.text, this.modeButtons.image);
     this.element.appendChild(modeRow);
@@ -54,62 +65,141 @@ export class AIGeneratorPanel {
     this.providerSelect = el('select', { className: 'api-select' }) as HTMLSelectElement;
     this.providerSelect.addEventListener('change', () => this.manager.setActiveId(this.providerSelect.value));
 
-    this.promptInput = el('input', {
-      type: 'text',
-      placeholder: 'e.g. futuristic red car, wooden chair',
+    this.promptInput = el('textarea', {
+      placeholder: 'Describe 3D model to generate...',
       className: 'ai-prompt-input',
-    }) as HTMLInputElement;
-    this.generateBtn = el(
+      rows: '3',
+    }) as HTMLTextAreaElement;
+    this.generateTextBtn = el(
       'button',
-      { className: 'ai-generate-btn', on: { click: () => void this.handleGenerate() } },
-      'Generate 3D Model'
+      { className: 'ai-generate-btn', on: { click: () => void this.handleGenerate('text') } },
+      'Generate from Text'
     ) as HTMLButtonElement;
+    this.textGroup = el(
+      'div',
+      { className: 'ai-prompt-group' },
+      this.promptInput,
+      this.generateTextBtn
+    );
+
+    this.imageInput = el('input', {
+      type: 'file',
+      accept: IMAGE_ACCEPT,
+      className: 'ai-image-input',
+    }) as HTMLInputElement;
+    this.imagePreview = el('img', { className: 'ai-image-preview', alt: 'Selected source image' }) as HTMLImageElement;
+    this.imageInfo = el('div', { className: 'ai-image-info' }, 'No image selected.');
+    this.dropZone = el(
+      'div',
+      { className: 'ai-dropzone' },
+      el('span', { className: 'ai-dropzone-title' }, 'Drag an image here'),
+      el('span', { className: 'ai-dropzone-hint' }, 'PNG, JPEG or WebP')
+    );
+    this.dropZone.addEventListener('dragover', (event: DragEvent) => {
+      event.preventDefault();
+      this.dropZone.classList.add('dragover');
+    });
+    this.dropZone.addEventListener('dragleave', () => this.dropZone.classList.remove('dragover'));
+    this.dropZone.addEventListener('drop', (event: DragEvent) => {
+      event.preventDefault();
+      this.dropZone.classList.remove('dragover');
+      const file = event.dataTransfer?.files?.[0];
+      if (file) void this.loadImage(file);
+    });
+
+    const uploadBtn = el(
+      'button',
+      { className: 'ghost ai-upload-btn', on: { click: () => void this.chooseImage() } },
+      'Upload image'
+    );
+    this.generateImageBtn = el(
+      'button',
+      { className: 'ai-generate-btn', on: { click: () => void this.handleGenerate('image') } },
+      'Generate from Image'
+    ) as HTMLButtonElement;
+    this.imageGroup = el(
+      'div',
+      { className: 'ai-image-box' },
+      uploadBtn,
+      this.dropZone,
+      this.imageInput,
+      this.imagePreview,
+      this.imageInfo,
+      this.generateImageBtn
+    );
+
     this.cancelBtn = el(
       'button',
       { className: 'ai-cancel-btn', on: { click: () => this.cancel() } },
       'Cancel'
     ) as HTMLButtonElement;
     this.cancelBtn.style.display = 'none';
-    this.promptGroup = el('div', { className: 'ai-prompt-group' }, this.promptInput);
 
-    this.imageInput = el('input', {
-      type: 'file',
-      accept: 'image/*',
-      className: 'ai-image-input',
-    }) as HTMLInputElement;
-    this.imageInput.addEventListener('change', () => {
-      const file = this.imageInput.files?.[0];
-      if (file) void this.loadImage(file);
-    });
-    this.imagePreview = el('img', { className: 'ai-image-preview', alt: 'Selected source image' }) as HTMLImageElement;
-    this.imageInfo = el('div', { className: 'ai-image-info' }, 'No image selected.');
-    this.imageBox = el(
-      'div',
-      { className: 'ai-image-box' },
-      el('label', { className: 'import-btn' }, 'Choose image', this.imageInput),
-      this.imagePreview,
-      this.imageInfo
-    );
-    this.imageBox.style.display = 'none';
+    this.spinner = el('div', { className: 'ai-spinner' });
+    this.spinner.style.display = 'none';
 
     this.statusEl = el('div', { className: 'ai-status' }, 'Ready');
     this.resultEl = el('div', { className: 'ai-result-info' }, '');
 
-    this.promptInput.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Enter') void this.handleGenerate();
-    });
-
     this.element.append(
       el('div', { className: 'field ai-provider-row' }, el('span', { className: 'ai-label' }, 'Provider'), this.providerSelect),
-      this.promptGroup,
-      el('div', { className: 'ai-generate-row' }, this.generateBtn, this.cancelBtn),
-      this.imageBox,
+      this.textGroup,
+      this.imageGroup,
+      el('div', { className: 'ai-generate-row' }, this.cancelBtn),
+      this.spinner,
       this.statusEl,
       this.resultEl
     );
+    this.imageGroup.style.display = 'none';
 
     this.renderProviders();
     window.addEventListener(API_PROVIDERS_CHANGED, this.onProvidersChanged as EventListener);
+  }
+
+  /** Show the generator, optionally switching to a mode first. */
+  open(mode?: GeneratorMode): void {
+    if (!this.overlay) this.createOverlay();
+    if (mode) this.setMode(mode);
+    this.overlay.style.display = 'flex';
+    this.promptInput.focus();
+  }
+
+  /** Hide the generator and return it to its place in the sidebar. */
+  close(): void {
+    if (!this.overlay) return;
+    this.overlay.remove();
+    this.overlay = null;
+    if (this.homeParent) {
+      if (this.homeNextSibling && this.homeNextSibling.parentNode === this.homeParent) {
+        this.homeParent.insertBefore(this.element, this.homeNextSibling);
+      } else {
+        this.homeParent.appendChild(this.element);
+      }
+    }
+  }
+
+  private createOverlay(): void {
+    this.homeParent = this.element.parentNode;
+    this.homeNextSibling = this.element.nextSibling;
+
+    const backdrop = el('div', { className: 'api-modal-backdrop ai-generator-backdrop', style: 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.75);padding:16px;' });
+    const card = el('div', { className: 'api-modal ai-generator-modal', style: 'background:#1e293b;color:#f8fafc;border:1px solid #334155;border-radius:12px;padding:20px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,0.6);' });
+    const closeBtn = el('button', { className: 'ghost', on: { click: () => this.close() } }, 'Close');
+    const header = el(
+      'div',
+      { className: 'ai-generator-header' },
+      el('h3', {}, 'AI 3D Generator'),
+      closeBtn
+    );
+    const body = el('div', { className: 'ai-generator-body' });
+    body.append(this.element);
+    card.append(header, body);
+    backdrop.append(card);
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop) this.close();
+    });
+    document.body.append(backdrop);
+    this.overlay = backdrop;
   }
 
   private readonly onProvidersChanged = (): void => this.renderProviders();
@@ -128,13 +218,20 @@ export class AIGeneratorPanel {
   }
 
   private setMode(mode: GeneratorMode): void {
-    this.mode = mode;
     this.modeButtons.text.classList.toggle('active', mode === 'text');
     this.modeButtons.image.classList.toggle('active', mode === 'image');
-    this.promptGroup.style.display = mode === 'text' ? '' : 'none';
-    this.imageBox.style.display = mode === 'image' ? '' : 'none';
-    this.generateBtn.textContent = mode === 'image' ? 'Generate from Image' : 'Generate 3D Model';
+    this.textGroup.style.display = mode === 'text' ? '' : 'none';
+    this.imageGroup.style.display = mode === 'image' ? '' : 'none';
     this.updateStatus(mode === 'image' ? 'Choose a source image.' : 'Ready', false);
+  }
+
+  private async chooseImage(): Promise<void> {
+    try {
+      const file = await pickImageFile(this.imageInput);
+      if (file) await this.loadImage(file);
+    } catch (err) {
+      this.updateStatus(`Could not open the file picker: ${describeError(err)}`, true);
+    }
   }
 
   private async loadImage(file: File): Promise<void> {
@@ -180,40 +277,36 @@ export class AIGeneratorPanel {
     }
   }
 
-  private async handleGenerate(): Promise<void> {
+  private async handleGenerate(mode: GeneratorMode): Promise<void> {
     if (this.abort) return;
     const prompt = this.promptInput.value.trim();
-    if (this.mode === 'text' && !prompt) {
+    if (mode === 'text' && !prompt) {
       this.updateStatus('Please enter a prompt first.', true);
       return;
     }
-    if (this.mode === 'image' && !this.imagePayload) {
+    if (mode === 'image' && !this.imagePayload) {
       this.updateStatus('Choose an image first.', true);
       return;
     }
-    if (this.manager.list().length === 0) {
-      this.updateStatus('Add a provider in the Universal API Manager first.', true);
-      return;
-    }
 
-    const label = this.mode === 'image' ? (this.imagePayload?.name ?? 'image') : prompt;
-    const pipeline: Pipeline = this.mode === 'text' ? 'text-to-3d' : 'image-to-3d';
-    const providerId = this.manager.getActiveId();
+    const providerId = this.resolveProviderId();
     const provider = this.manager.getConfig(providerId);
-    const image = this.mode === 'image' && this.imagePayload
-      ? {
-          dataUrl: this.imagePayload.dataUrl,
-          name: this.imagePayload.name,
-          mime: 'image/jpeg',
-          pixels: this.imagePayload.pixels,
-          width: this.imagePayload.width,
-          height: this.imagePayload.height,
-        }
-      : undefined;
+    const label = mode === 'image' ? (this.imagePayload?.name ?? 'image') : prompt;
+    const pipeline: Pipeline = mode === 'image' ? 'image-to-3d' : 'text-to-3d';
+    const image: ImageInput | undefined =
+      mode === 'image' && this.imagePayload
+        ? {
+            dataUrl: this.imagePayload.dataUrl,
+            name: this.imagePayload.name,
+            mime: 'image/jpeg',
+            pixels: this.imagePayload.pixels,
+            width: this.imagePayload.width,
+            height: this.imagePayload.height,
+          }
+        : undefined;
 
     this.abort = new AbortController();
-    setDisabled(this.generateBtn, true);
-    this.cancelBtn.style.display = '';
+    this.setBusy(true);
     text(this.resultEl, '');
     this.updateStatus(`Using ${provider?.name ?? 'provider'}…`, false);
 
@@ -229,19 +322,35 @@ export class AIGeneratorPanel {
       if (this.abort?.signal.aborted) {
         this.updateStatus('Generation cancelled.', false);
       } else {
-        this.updateStatus(`Generation failed: ${describeError(err)}`, true);
-        text(
-          this.resultEl,
-          provider?.kind === 'gradio'
-            ? 'Check the Space URL and endpoint in the API Manager, then run Test connection.'
-            : 'Check the provider URL and key in the Universal API Manager, then run Test connection.'
-        );
+        this.addProceduralFallback(prompt || label, image, describeError(err));
       }
     } finally {
       this.abort = null;
-      this.cancelBtn.style.display = 'none';
-      setDisabled(this.generateBtn, false);
+      this.setBusy(false);
     }
+  }
+
+  /**
+   * Hugging Face prefers a configured Space over the local placeholder
+   * backend, so the generator buttons reach the real inference endpoint.
+   */
+  private resolveProviderId(): string {
+    const activeId = this.manager.getActiveId();
+    const active = this.manager.getConfig(activeId);
+    if (active?.kind === 'gradio') return activeId;
+    const gradio = this.manager.list().find((provider) => provider.kind === 'gradio' && provider.baseUrl.trim());
+    if (gradio) {
+      this.manager.setActiveId(gradio.id);
+      return gradio.id;
+    }
+    return activeId;
+  }
+
+  private setBusy(busy: boolean): void {
+    this.spinner.style.display = busy ? '' : 'none';
+    setDisabled(this.generateTextBtn, busy);
+    setDisabled(this.generateImageBtn, busy);
+    this.cancelBtn.style.display = busy ? '' : 'none';
   }
 
   private async importOutput(output: GenerationOutput, label: string): Promise<void> {
@@ -279,6 +388,32 @@ export class AIGeneratorPanel {
       );
     }
     this.engine.resetCamera();
+  }
+
+  /**
+   * The free endpoint was cold, rate limited or unreachable. Build a real
+   * mesh from the inputs instead of leaving the viewport empty.
+   */
+  private addProceduralFallback(label: string, image: ImageInput | undefined, reason: string): void {
+    try {
+      const result = buildProceduralMesh(label, image);
+      const obj = new SceneObject(result.mesh, { name: result.name });
+      const box = new THREE.Box3().setFromObject(result.mesh);
+      result.mesh.position.y -= box.min.y;
+      this.engine.graph.add(obj);
+      this.engine.resetCamera();
+      this.updateStatus(`Added procedural mesh (${label})`, false);
+      text(
+        this.resultEl,
+        `The AI endpoint was unavailable (${reason}). ${result.description} Configure a Hugging Face Space in the API Manager for real AI models.`
+      );
+    } catch (err) {
+      this.updateStatus(`Generation failed: ${describeError(err)}`, true);
+      text(
+        this.resultEl,
+        'Check the provider URL and key in the Universal API Manager, then run Test connection.'
+      );
+    }
   }
 
   private cancel(): void {

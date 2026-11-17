@@ -5,6 +5,7 @@ import { PROVIDER_KINDS } from '../ai/types';
 import { loadSecret } from '../ai/key-store';
 import { McpBridge, createEditorAdapter, type McpBridgeState } from '../ai/mcp-bridge';
 import type { EditorEngine } from '../engine/core/editor-engine';
+import type { GeneratorMode } from './AIGeneratorPanel';
 
 /**
  * Mobile-first provider configuration. The compact panel lives in the sidebar;
@@ -34,11 +35,14 @@ export class APIManagerPanel {
   private dialogStatus: HTMLElement | null = null;
   private readonly mcpStatus: HTMLElement;
   private readonly mcpButton: HTMLButtonElement;
+  private readonly hfStatus: HTMLElement;
   private bridge: McpBridge | null = null;
+  private hfConnected = false;
 
   constructor(
     private readonly manager: APIManager,
-    private readonly engine?: EditorEngine
+    private readonly engine?: EditorEngine,
+    private readonly onOpenGenerator?: (mode: GeneratorMode) => void
   ) {
     this.element = el('div', { className: 'panel api-panel' });
     this.element.append(el('h3', {}, 'Universal API Manager'));
@@ -58,6 +62,22 @@ export class APIManagerPanel {
     this.statusEl = el('div', { className: 'api-status' }, 'Choose a provider, then test it.');
     this.element.append(this.providerSelect, row, this.statusEl);
 
+    this.hfStatus = el('div', { className: 'api-status' }, 'Hugging Face: not connected.');
+    const generatorRow = el('div', { className: 'actions api-generator-actions' });
+    generatorRow.append(
+      el('button', { on: { click: () => this.openGenerator('text') } }, 'Text to 3D'),
+      el('button', { className: 'ghost', on: { click: () => this.openGenerator('image') } }, 'Image to 3D')
+    );
+    this.element.appendChild(
+      el(
+        'div',
+        { className: 'api-generator' },
+        el('span', { className: 'api-label' }, 'AI 3D Generator'),
+        this.hfStatus,
+        generatorRow
+      )
+    );
+
     this.mcpStatus = el('div', { className: 'api-status' }, 'Antigravity MCP: not connected.');
     this.mcpButton = el(
       'button',
@@ -76,6 +96,36 @@ export class APIManagerPanel {
 
     if (this.manager.list().length > 0) this.renderSelect();
     window.addEventListener(API_PROVIDERS_CHANGED, this.onProvidersChanged as EventListener);
+  }
+
+  /** Open the AI Generator in the requested mode. */
+  private openGenerator(mode: GeneratorMode): void {
+    this.closeDialog();
+    if (!this.onOpenGenerator) {
+      text(this.hfStatus, 'The AI Generator is not available in this build.');
+      this.hfStatus.style.color = '#f87171';
+      return;
+    }
+    this.onOpenGenerator(mode);
+  }
+
+  /** Track the Hugging Face connection so the generator can report it. */
+  private renderHfState(): void {
+    const active = this.manager.getConfig(this.manager.getActiveId());
+    const isHuggingFace = active?.kind === 'gradio';
+    if (!isHuggingFace) {
+      this.hfConnected = false;
+      text(this.hfStatus, 'Hugging Face: not connected.');
+      this.hfStatus.style.color = '#60a5fa';
+      return;
+    }
+    if (this.hfConnected) {
+      text(this.hfStatus, 'Hugging Face: connected. Open the generator below.');
+      this.hfStatus.style.color = '#34d399';
+    } else {
+      text(this.hfStatus, 'Hugging Face: configured. Test the connection or open the generator.');
+      this.hfStatus.style.color = '#fbbf24';
+    }
   }
 
   /** Connect or disconnect the local Antigravity MCP bridge. */
@@ -116,6 +166,7 @@ export class APIManagerPanel {
 
   private readonly onProvidersChanged = (): void => {
     this.renderSelect();
+    this.renderHfState();
   };
 
   private renderSelect(): void {
@@ -139,8 +190,15 @@ export class APIManagerPanel {
     this.statusEl.style.color = '#60a5fa';
     text(this.statusEl, `Testing ${config.name}…`);
     const result = await this.manager.testProvider(id);
+    this.applyTestResult(config, result);
+  }
+
+  /** Record the connection result and reflect it in the generator block. */
+  private applyTestResult(config: ProviderConfig, result: { ok: boolean; message: string; detail?: string }): void {
     this.statusEl.style.color = result.ok ? '#34d399' : '#f87171';
     text(this.statusEl, result.detail ? `${result.message} ${result.detail}` : result.message);
+    if (config.kind === 'gradio') this.hfConnected = result.ok;
+    this.renderHfState();
   }
 
   private openDialog(providerId: string): void {
@@ -370,6 +428,8 @@ export class APIManagerPanel {
     this.setDialogStatus('Testing connection…', false);
     const result = await this.manager.testProvider(id, this.abortTest.signal);
     this.setDialogStatus(result.detail ? `${result.message} ${result.detail}` : result.message, !result.ok);
+    if (this.editing?.kind === 'gradio') this.hfConnected = result.ok;
+    this.renderHfState();
   }
 
   private clearKey(): void {
