@@ -1,5 +1,5 @@
 {
-  "appId": "com.ai3dcreator.app",
-  "appName": "AI 3D Creator",
+  "appId": "app.ai3d.creator",
+  "appName": "AI3D",
   "webDir": "dist"
 }
