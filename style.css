@@ -455,3 +455,5 @@ footer {
     padding: 16px 14px 28px;
   }
 }
+
+.sidebar, .sidebar-content, .panel-container { overflow-y: auto !important; max-height: 100vh !important; padding-bottom: 80px !important; }
