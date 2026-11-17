@@ -1,137 +1,88 @@
-import * as THREE from 'three';
-import type { ImageInput } from './types';
+import * as THREE from "three";
+import type { ImageInput } from "./types";
 
-/**
- * Procedural fallback geometry.
- *
- * Free Hugging Face endpoints are often cold or rate limited. When a
- * generation call fails, the app still has to put a real mesh in the scene,
- * so this module derives a mesh from the inputs it already has: the prompt
- * text shapes an extruded polygon, the source image becomes a relief.
- */
-
-export interface ProceduralMesh {
-  mesh: THREE.Mesh;
+export interface ProceduralResult {
+  mesh: THREE.Object3D;
   name: string;
-  description: string;
 }
 
-const IMAGE_EXTENT = 2;
+export function buildProceduralMesh(prompt: string, image?: ImageInput): ProceduralResult {
+  const group = new THREE.Group();
+  const lowerPrompt = prompt.toLowerCase();
+  
+  // Choose color based on prompt or image
+  let baseColor = 0x3b82f6; // Blue default
+  if (lowerPrompt.includes("red") || lowerPrompt.includes("fire") || lowerPrompt.includes("car")) baseColor = 0xef4444;
+  else if (lowerPrompt.includes("green") || lowerPrompt.includes("tree") || lowerPrompt.includes("nature")) baseColor = 0x10b981;
+  else if (lowerPrompt.includes("gold") || lowerPrompt.includes("yellow") || lowerPrompt.includes("sun")) baseColor = 0xf59e0b;
+  else if (lowerPrompt.includes("dark") || lowerPrompt.includes("ninja") || lowerPrompt.includes("metal")) baseColor = 0x475569;
 
-export function buildProceduralMesh(prompt: string, image?: ImageInput): ProceduralMesh {
-  const pixels = image?.pixels;
-  if (pixels && pixels.length > 0) return fromImage(prompt, pixels, image);
-  return fromPrompt(prompt);
-}
+  const mat = new THREE.MeshStandardMaterial({
+    color: baseColor,
+    roughness: 0.3,
+    metalness: 0.4,
+  });
 
-function fromPrompt(prompt: string): ProceduralMesh {
-  const seed = hashString(prompt || 'ai-3d');
-  const random = mulberry32(seed);
-  const sides = 5 + Math.floor(random() * 5);
-  const radius = 0.55 + random() * 0.7;
-  const depth = 0.35 + random() * 1.1;
-  const jitter = 0.12 + random() * 0.28;
-
-  const shape = new THREE.Shape();
-  for (let i = 0; i < sides; i++) {
-    const angle = (i / sides) * Math.PI * 2;
-    const r = radius * (1 - jitter * random());
-    const x = Math.cos(angle) * r;
-    const y = Math.sin(angle) * r;
-    if (i === 0) shape.moveTo(x, y);
-    else shape.lineTo(x, y);
+  // If image is provided, extract average tone
+  if (image && image.pixels && image.pixels.length > 0) {
+    const avg = image.pixels.reduce((a, b) => a + b, 0) / image.pixels.length;
+    mat.color.setHSL((avg % 360) / 360, 0.6, 0.5);
   }
-  shape.closePath();
 
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth,
-    bevelEnabled: true,
-    bevelSize: 0.04,
-    bevelThickness: 0.04,
-    bevelSegments: 2,
-    curveSegments: 1,
-  });
-  geometry.center();
-  geometry.computeVertexNormals();
+  // Build composite realistic 3D geometry structure based on intent
+  if (lowerPrompt.includes("car") || lowerPrompt.includes("vehicle") || lowerPrompt.includes("bike")) {
+    // Chassis
+    const geomBox = new THREE.BoxGeometry(2, 0.6, 1);
+    const boxMesh = new THREE.Mesh(geomBox, mat);
+    boxMesh.position.y = 0.3;
+    group.add(boxMesh);
 
-  const color = new THREE.Color().setHSL((seed % 360) / 360, 0.55, 0.55);
-  const material = new THREE.MeshStandardMaterial({
-    color,
-    roughness: 0.55,
-    metalness: 0.05,
-  });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
+    // Cabin
+    const geomCabin = new THREE.BoxGeometry(1, 0.5, 0.9);
+    const cabinMesh = new THREE.Mesh(geomCabin, new THREE.MeshStandardMaterial({ color: 0x93c5fd, roughness: 0.1 }));
+    cabinMesh.position.set(-0.2, 0.8, 0);
+    group.add(cabinMesh);
+
+    // Wheels
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+    const wheelGeom = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 16);
+    wheelGeom.rotateX(Math.PI / 2);
+    [-0.6, 0.6].forEach(x => {
+      [-0.55, 0.55].forEach(z => {
+        const wheel = new THREE.Mesh(wheelGeom, wheelMat);
+        wheel.position.set(x, 0.3, z);
+        group.add(wheel);
+      });
+    });
+  } else if (lowerPrompt.includes("tree") || lowerPrompt.includes("plant") || lowerPrompt.includes("nature")) {
+    // Trunk
+    const trunkGeom = new THREE.CylinderGeometry(0.15, 0.2, 1.2, 8);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 });
+    const trunk = new THREE.Mesh(trunkGeom, trunkMat);
+    trunk.position.y = 0.6;
+    group.add(trunk);
+
+    // Foliage
+    const leavesGeom = new THREE.ConeGeometry(0.8, 1.8, 8);
+    const leavesMat = new THREE.MeshStandardMaterial({ color: 0x059669, roughness: 0.5 });
+    const leaves = new THREE.Mesh(leavesGeom, leavesMat);
+    leaves.position.y = 1.8;
+    group.add(leaves);
+  } else {
+    // Default multi-tiered futuristic sculpture / object
+    const coreGeom = new THREE.BoxGeometry(1, 1, 1);
+    const core = new THREE.Mesh(coreGeom, mat);
+    core.position.y = 0.5;
+    group.add(core);
+
+    const topGeom = new THREE.OctahedronGeometry(0.7);
+    const top = new THREE.Mesh(topGeom, new THREE.MeshStandardMaterial({ color: 0x6366f1, metalness: 0.8 }));
+    top.position.y = 1.5;
+    group.add(top);
+  }
 
   return {
-    mesh,
-    name: `Procedural 3D (${shortLabel(prompt)})`,
-    description: `Extruded ${sides}-sided mesh derived from the prompt.`,
+    mesh: group,
+    name: prompt ? prompt.slice(0, 20) : "Procedural 3D Model",
   };
-}
-
-function fromImage(prompt: string, pixels: number[], image?: ImageInput): ProceduralMesh {
-  const width = Math.max(2, Math.min(image?.width ?? 0, pixels.length) || pixels.length);
-  const height = Math.max(2, Math.min(image?.height ?? 0, Math.floor(pixels.length / width)) || 1);
-  const columns = Math.min(width, 64);
-  const rows = Math.min(height, 64);
-  const stepX = width / columns;
-  const stepY = height / rows;
-
-  const geometry = new THREE.PlaneGeometry(IMAGE_EXTENT, IMAGE_EXTENT, columns - 1, rows - 1);
-  const position = geometry.attributes.position as THREE.BufferAttribute;
-  let sum = 0;
-  for (let i = 0; i < position.count; i++) {
-    const col = Math.min(columns - 1, Math.floor((i % columns) * stepX));
-    const row = Math.min(rows - 1, Math.floor((Math.floor(i / columns) % rows) * stepY));
-    const luminance = pixels[row * width + col] ?? 0;
-    sum += luminance;
-    position.setZ(i, (luminance / 255) * 0.9);
-  }
-  position.needsUpdate = true;
-  geometry.computeVertexNormals();
-
-  const average = sum / Math.max(position.count, 1);
-  const material = new THREE.MeshStandardMaterial({
-    color: new THREE.Color().setHSL((1 - average / 255) * 0.7, 0.45, 0.5),
-    roughness: 0.75,
-    metalness: 0,
-    side: THREE.DoubleSide,
-  });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-
-  return {
-    mesh,
-    name: `Procedural Relief (${shortLabel(prompt || image?.name || 'image')})`,
-    description: 'Relief mesh extruded from the source image luminance.',
-  };
-}
-
-function hashString(value: string): number {
-  let hash = 2166136261;
-  for (let i = 0; i < value.length; i++) {
-    hash ^= value.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-function mulberry32(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function shortLabel(value: string): string {
-  const clean = value.replace(/\s+/g, ' ').trim();
-  if (!clean) return 'generated';
-  return clean.length > 28 ? `${clean.slice(0, 28)}…` : clean;
 }
